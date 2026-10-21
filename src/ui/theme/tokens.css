@@ -1,0 +1,220 @@
+/* iPadOS design language: system colors, Dynamic Type sizes, materials and motion.
+   Reader themes (ReaderTheme in AppSettings.swift) are exposed as --reader-* on [data-theme]. */
+
+:root {
+  color-scheme: light;
+  --font-ui: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: ui-serif, 'New York', Georgia, serif;
+
+  /* Dynamic Type (Large, default) */
+  --text-large-title: 34px;
+  --text-title1: 28px;
+  --text-title2: 22px;
+  --text-title3: 20px;
+  --text-headline: 17px;
+  --text-body: 17px;
+  --text-callout: 16px;
+  --text-subheadline: 15px;
+  --text-footnote: 13px;
+  --text-caption: 12px;
+
+  /* System colors (light) */
+  --system-background: #ffffff;
+  --secondary-system-background: #f2f2f7;
+  --tertiary-system-background: #ffffff;
+  --grouped-background: #f2f2f7;
+  --secondary-grouped-background: #ffffff;
+  --label: #000000;
+  --secondary-label: rgba(60, 60, 67, 0.6);
+  --tertiary-label: rgba(60, 60, 67, 0.3);
+  --quaternary-label: rgba(60, 60, 67, 0.18);
+  --separator: rgba(60, 60, 67, 0.29);
+  --opaque-separator: #c6c6c8;
+  --accent: #007aff;
+  --accent-pressed: #0062cc;
+  --accent-tint: rgba(0, 122, 255, 0.15);
+  --system-red: #ff3b30;
+  --system-orange: #ff9500;
+  --system-green: #34c759;
+  --system-yellow: #ffcc00;
+  --system-fill: rgba(120, 120, 128, 0.2);
+  --secondary-fill: rgba(120, 120, 128, 0.16);
+  --tertiary-fill: rgba(118, 118, 128, 0.12);
+  --bar-material: rgba(249, 249, 249, 0.78);
+  --thick-material: rgba(255, 255, 255, 0.86);
+  --dimming: rgba(0, 0, 0, 0.3);
+  --toggle-off: rgba(120, 120, 128, 0.16);
+  --toggle-knob: #ffffff;
+
+  --radius-small: 8px;
+  --radius: 10px;
+  --radius-medium: 12px;
+  --radius-large: 16px;
+  --radius-sheet: 13px;
+
+  --shadow-sheet: 0 10px 40px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-panel: 0 0 24px rgba(0, 0, 0, 0.22);
+  --shadow-menu: 0 12px 40px rgba(0, 0, 0, 0.2);
+  --shadow-knob: 0 3px 8px rgba(0, 0, 0, 0.15), 0 3px 1px rgba(0, 0, 0, 0.06);
+
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --duration: 0.35s;
+  --duration-fast: 0.2s;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --nav-height: 50px;
+  --hit: 44px;
+
+  /* Reader theme defaults (sepia, the app default) */
+  --reader-bg: rgb(245, 237, 217);
+  --reader-text: rgb(51, 38, 26);
+  --reader-translation: rgb(115, 71, 31);
+  --reader-highlight: rgba(255, 219, 115, 0.7);
+  --reader-selection: rgba(140, 191, 255, 0.55);
+}
+
+/* ReaderTheme.light */
+:root[data-theme='light'] {
+  --reader-bg: rgb(255, 255, 255);
+  --reader-text: rgb(26, 26, 26);
+  --reader-translation: rgb(31, 92, 158);
+  --reader-highlight: rgba(255, 219, 115, 0.7);
+  --reader-selection: rgba(140, 191, 255, 0.55);
+}
+
+/* ReaderTheme.sepia */
+:root[data-theme='sepia'] {
+  --reader-bg: rgb(245, 237, 217);
+  --reader-text: rgb(51, 38, 26);
+  --reader-translation: rgb(115, 71, 31);
+  --reader-highlight: rgba(255, 219, 115, 0.7);
+  --reader-selection: rgba(140, 191, 255, 0.55);
+}
+
+/* ReaderTheme.dark — also switches the system color scheme to dark */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --reader-bg: rgb(28, 28, 31);
+  --reader-text: rgb(224, 222, 214);
+  --reader-translation: rgb(140, 189, 242);
+  --reader-highlight: rgb(89, 77, 26);
+  --reader-selection: rgba(64, 102, 166, 0.7);
+
+  --system-background: #000000;
+  --secondary-system-background: #1c1c1e;
+  --tertiary-system-background: #2c2c2e;
+  --grouped-background: #000000;
+  --secondary-grouped-background: #1c1c1e;
+  --label: #ffffff;
+  --secondary-label: rgba(235, 235, 245, 0.6);
+  --tertiary-label: rgba(235, 235, 245, 0.3);
+  --quaternary-label: rgba(235, 235, 245, 0.16);
+  --separator: rgba(84, 84, 88, 0.6);
+  --opaque-separator: #38383a;
+  --accent: #0a84ff;
+  --accent-pressed: #409cff;
+  --accent-tint: rgba(10, 132, 255, 0.22);
+  --system-red: #ff453a;
+  --system-orange: #ff9f0a;
+  --system-green: #30d158;
+  --system-yellow: #ffd60a;
+  --system-fill: rgba(120, 120, 128, 0.36);
+  --secondary-fill: rgba(120, 120, 128, 0.32);
+  --tertiary-fill: rgba(118, 118, 128, 0.24);
+  --bar-material: rgba(29, 29, 31, 0.78);
+  --thick-material: rgba(44, 44, 46, 0.88);
+  --dimming: rgba(0, 0, 0, 0.45);
+  --toggle-off: rgba(120, 120, 128, 0.32);
+  --shadow-sheet: 0 10px 40px rgba(0, 0, 0, 0.6);
+  --shadow-panel: 0 0 24px rgba(0, 0, 0, 0.6);
+  --shadow-menu: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  line-height: 1.29;
+  letter-spacing: -0.41px;
+  color: var(--label);
+  background: var(--system-background);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+
+#app {
+  height: 100%;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent-tint);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0.01s;
+    --duration-fast: 0.01s;
+  }
+}

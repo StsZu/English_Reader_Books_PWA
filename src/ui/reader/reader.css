@@ -1,0 +1,225 @@
+/* Reader: book text, parallel translation pane, playback bar (ReaderView.swift). */
+
+.reader {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--reader-bg);
+  color: var(--reader-text);
+}
+
+.reader-loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--reader-bg);
+}
+
+.reader-scroll {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.reader-column {
+  box-sizing: content-box;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 28px var(--side);
+  display: flex;
+  flex-direction: column;
+  gap: var(--para-gap);
+}
+
+/* Book text: never selectable or long-press callable by Safari; our own gestures handle it. */
+.para {
+  margin: 0;
+  padding: 0 6px;
+  font-family: var(--book-font);
+  font-size: var(--book-size);
+  line-height: var(--book-line);
+  text-align: var(--align);
+  text-indent: var(--indent);
+  hyphens: manual;
+  overflow-wrap: break-word;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  color: var(--reader-text);
+  cursor: default;
+}
+
+.para.heading {
+  font-size: var(--heading-size);
+  line-height: var(--heading-line);
+  font-weight: 700;
+  text-indent: 0;
+  text-align: left;
+}
+
+.para .s {
+  border-radius: 3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color 0.15s ease;
+}
+
+.para .s.active {
+  background: var(--reader-highlight);
+}
+
+.para .sel {
+  background: var(--reader-selection);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+
+.para .w.saved {
+  text-decoration: underline dashed var(--reader-translation);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+}
+
+.reader-scroll.pressing .para {
+  cursor: text;
+}
+
+.chapter-nav {
+  display: flex;
+  align-items: center;
+  margin-top: 24px;
+}
+
+/* MARK: Parallel translation pane */
+
+.parallel-pane {
+  flex: none;
+  box-sizing: border-box;
+  color: var(--reader-translation);
+  background: color-mix(in srgb, var(--reader-translation) 8%, var(--reader-bg));
+  border-bottom: 0.5px solid var(--separator);
+  overflow: hidden;
+}
+
+.pane-row {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  min-width: 0;
+}
+
+.pane-text {
+  flex: 1;
+  min-width: 0;
+  max-height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  padding: 8px 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.pane-text.multiline {
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: normal;
+  align-self: stretch;
+  display: flex;
+  align-items: safe center;
+}
+
+.pane-text.multiline > span {
+  max-height: 100%;
+}
+
+.pane-text::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-text .secondary,
+.pane-hint {
+  color: var(--secondary-label);
+}
+
+.pane-hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.pane-spacer {
+  flex: 1;
+}
+
+.pane-badge {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--reader-translation) 60%, transparent);
+  white-space: nowrap;
+}
+
+.pane-controls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.pane-warning {
+  color: var(--system-orange);
+  display: inline-flex;
+}
+
+.filled-icon svg {
+  fill: currentColor;
+}
+
+/* MARK: Playback bar */
+
+.playback-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 24px calc(10px + env(safe-area-inset-bottom));
+  background: var(--bar-background);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--separator);
+  color: var(--label);
+}
+
+.playback-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--secondary-label);
+}
+
+.playback-status {
+  font-size: 13px;
+  color: var(--secondary-label);
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .playback-bar { gap: 10px; padding-left: 12px; padding-right: 12px; }
+  .pane-row { padding: 0 12px; }
+}

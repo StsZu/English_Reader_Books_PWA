@@ -13,9 +13,9 @@
     "test:live": "LIVE=1 vitest run tests/live",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "golden": "node --experimental-strip-types scripts/golden-compare.ts",
+    "golden": "GOLDEN=1 vitest run tests/golden",
     "size": "node scripts/size.mjs",
-    "check": "sh scripts/check-secrets.sh && node scripts/size.mjs"
+    "check": "npm run build && sh scripts/check-secrets.sh && node scripts/size.mjs"
   },
   "dependencies": {
     "@preact/signals": "2.11.3",

@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     setupFiles: ['tests/setup.ts'],
-    include: ['tests/unit/**/*.test.{ts,tsx}', ...(process.env.LIVE ? ['tests/live/**/*.test.ts'] : [])],
+    include: ['tests/unit/**/*.test.{ts,tsx}', ...(process.env.LIVE ? ['tests/live/**/*.test.ts'] : []), ...(process.env.GOLDEN ? ['tests/golden/**/*.test.ts'] : [])],
     coverage: { include: ['src/core/**'], reporter: ['text-summary'] },
   },
 })

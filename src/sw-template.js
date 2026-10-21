@@ -23,7 +23,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
   if (request.mode === 'navigate') {
-    event.respondWith(caches.match('./').then((cached) => cached || fetch(request)))
+    // Network first so a new version arrives on the next launch; the cached shell when offline.
+    event.respondWith(
+      Promise.race([
+        fetch(request).then((response) => {
+          if (response.ok) caches.open(CACHE).then((cache) => cache.put('./', response.clone()))
+          return response
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      ]).catch(() => caches.match('./').then((cached) => cached || Response.error())),
+    )
     return
   }
   event.respondWith(caches.match(request).then((cached) => cached || fetch(request)))

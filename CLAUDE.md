@@ -19,3 +19,13 @@ PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_
 - Платні живі тести, розгортання, push, створення репозиторію на GitHub — лише з окремим дозволом.
 - Після кожного завдання оновлювати його стан і результат перевірки в `tasks.md`.
 - Спілкування українською, стисло, без емодзі.
+
+## Команди
+
+- `npm run dev` — розробка (тестовий режим увімкнено: `?reset`, `?testTranslation`, `?testSpeech`, `?testWordCard`, `?testSavedWords`, `?testRecording`, `?voice=system|openAI`, `?gallery`).
+- `npm test` — модульні тести (без мережі); `npm run test:e2e` — WebKit iPad + офлайн у Chromium; `npm run golden` — розбиття проти нативного імпортера; `npm run check` — production-збірка, секрети, CSP, розмір.
+- `npm run test:live` — платні живі тести OpenAI, лише з дозволом і ключем у змінній середовища.
+
+## Стан (2026-10-21)
+
+Хвилі 0–5 виконано (`specs/001-pwa-copy/tasks.md`), проміжне узгодження — `specs/001-pwa-copy/alignment.md`. Відкрито: T55 (живі тести, платно), T60 (GitHub + Cloudflare Pages, потрібен дозвіл), T61 (ручна перевірка на iPad за чек-листом).

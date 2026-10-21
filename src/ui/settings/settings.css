@@ -1,0 +1,45 @@
+.settings-list {
+  padding-bottom: 24px;
+}
+
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 16px;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.settings-field-row > input,
+.settings-field-row > .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-field-label {
+  flex: none;
+  width: 150px;
+  color: var(--label);
+  font-size: var(--text-body);
+}
+
+.settings-note {
+  padding: 10px 16px 12px;
+  font-size: var(--text-footnote);
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+
+.settings-button-row {
+  padding: 10px 16px 12px;
+}
+
+/* Form buttons are tinted like SwiftUI Button rows; disabled ones are grey. */
+.settings-list .row.is-button .row-title:not(.is-destructive) {
+  color: var(--accent);
+}
+
+.settings-list .row.is-button:disabled .row-title {
+  color: var(--tertiary-label, rgba(60, 60, 67, 0.3));
+}

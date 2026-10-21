@@ -12,11 +12,12 @@ export interface TestFlags {
   importPath: string | null
   /** OpenAI key injected only for live tests. */
   key: string | null
+  installHint: boolean
 }
 
 const none: TestFlags = {
   reset: false, translation: false, speech: false, wordCard: false, savedWords: false, recording: false,
-  voice: null, importPath: null, key: null,
+  voice: null, importPath: null, key: null, installHint: false,
 }
 
 function parse(): TestFlags {
@@ -33,6 +34,7 @@ function parse(): TestFlags {
     voice: voice === 'openAI' || voice === 'system' ? voice : null,
     importPath: params.get('import'),
     key: params.get('key'),
+    installHint: params.has('installHint'),
   }
 }
 

@@ -13,7 +13,10 @@ export default defineConfig({
     locale: 'uk-UA',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'webkit-ipad', use: { browserName: 'webkit' } }],
+  projects: [
+    { name: 'webkit-ipad', use: { browserName: 'webkit' }, testIgnore: /offline\.spec/ },
+    { name: 'chromium-offline', use: { browserName: 'chromium', serviceWorkers: 'allow' }, testMatch: /offline\.spec/ },
+  ],
   webServer: {
     command: 'npx vite build --mode test && npx vite preview --outDir dist-test --port 4174 --strictPort',
     url: 'http://localhost:4174',
