@@ -4,7 +4,7 @@ import { ReplayMissingError, abortError, type SpeechEngine } from '../../src/con
 import type { Book } from '../../src/core/model/book.ts'
 import { setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
 import { OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
-import { RETRY_DELAY_MS, ReadingController } from '../../src/core/speech/reading.ts'
+import { PREFETCH_PARTS, RETRY_DELAY_MS, ReadingController, speechParts } from '../../src/core/speech/reading.ts'
 import { SystemSpeechEngine, bestEnglishVoice, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
 
 // MARK: - Minimal Cache Storage (happy-dom has none)
@@ -246,6 +246,8 @@ const label = (refs: { paragraph: { chapter: number; paragraph: number }; senten
 
 class ScriptedEngine implements SpeechEngine {
   spoken: string[] = []
+  prefetched: string[] = []
+  constructor(readonly prefersShortParts = false) {}
   pauses = 0
   resumes = 0
   private pending: { resolve: () => void; reject: (e: unknown) => void } | null = null
@@ -265,7 +267,7 @@ class ScriptedEngine implements SpeechEngine {
     this.pending = null
     p?.reject(abortError())
   }
-  prefetch() {}
+  prefetch(text: string) { this.prefetched.push(text) }
   pause() { this.pauses++ }
   resume() { this.resumes++ }
   stop() {
@@ -351,6 +353,63 @@ describe('ReadingController', () => {
     expect(controller.errorMessage.value).toBeNull()
     controller.stop()
     vi.useRealTimers()
+  })
+
+  it('splits long sentences at clause boundaries, short ones stay whole', () => {
+    expect(speechParts('Short one.')).toEqual(['Short one.'])
+    const long = 'Pewnego razu zdarzyło się, że latarnik w Aspinwall, niedaleko Panamy, przepadł bez wieści; ponieważ stało się to wśród burzy, przypuszczano, że nieszczęśliwy musiał podejść nad sam brzeg skalistej wysepki — i został spłukany przez bałwan.'
+    const parts = speechParts(long, 80)
+    expect(parts.length).toBeGreaterThan(2)
+    expect(parts.join(' ')).toBe(long)
+    for (const part of parts) expect(part.length).toBeLessThanOrEqual(80)
+    expect(parts[0].endsWith(',')).toBe(true)
+    const words = speechParts('word '.repeat(60).trim(), 50)
+    expect(words.join(' ')).toBe('word '.repeat(60).trim())
+    for (const part of words) expect(part.length).toBeLessThanOrEqual(50)
+  })
+
+  it('speaks a long sentence in parts for the AI voice and prepares parts ahead', async () => {
+    const long = `${'Alpha beta gamma delta, '.repeat(12)}end.`
+    const longBook: Book = { ...book, chapters: [{ title: '1', paragraphs: [{ kind: 'text', sentences: ['Short.', long, 'Next.'] }] }] }
+    const engine = new ScriptedEngine(true)
+    const controller = new ReadingController(longBook, () => engine)
+    controller.play({ chapter: 0, paragraph: 0 })
+    await tick()
+    const parts = speechParts(long)
+    expect(parts.length).toBeGreaterThan(1)
+    // While «Short.» plays, the parts of the long sentence after it are already being prepared.
+    expect(engine.prefetched.slice(0, PREFETCH_PARTS)).toEqual([...parts, 'Next.'].slice(0, PREFETCH_PARTS))
+    for (let i = 0; i <= parts.length; i++) {
+      engine.finishCurrent()
+      await tick()
+    }
+    expect(engine.spoken).toEqual(['Short.', ...parts, 'Next.'])
+    expect(label([controller.current.value!])).toEqual(['0-0-2'])
+    controller.stop()
+
+    const system = new ScriptedEngine(false)
+    const whole = new ReadingController(longBook, () => system)
+    whole.play({ paragraph: { chapter: 0, paragraph: 0 }, sentence: 1 })
+    await tick()
+    expect(system.spoken).toEqual([long])
+    whole.stop()
+  })
+
+  it('a long sentence cut off in the middle is replayed from its first part', async () => {
+    const long = `${'Alpha beta gamma delta, '.repeat(12)}end.`
+    const longBook: Book = { ...book, chapters: [{ title: '1', paragraphs: [{ kind: 'text', sentences: [long] }] }] }
+    const engine = new ScriptedEngine(true)
+    const controller = new ReadingController(longBook, () => engine)
+    controller.play({ chapter: 0, paragraph: 0 })
+    await tick()
+    engine.finishCurrent()
+    await tick()
+    controller.interrupt()
+    controller.resume()
+    await tick()
+    const parts = speechParts(long)
+    expect(engine.spoken).toEqual([parts[0], parts[1], parts[0]])
+    controller.stop()
   })
 
   it('starts at the selected sentence and reads on', async () => {

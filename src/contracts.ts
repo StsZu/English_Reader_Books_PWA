@@ -92,6 +92,8 @@ export interface SpeechEngine {
   speak(text: string, onStart: () => void): Promise<void>
   /** Starts preparing audio for upcoming text so playback has no gap. */
   prefetch(text: string): void
+  /** True when audio is prepared as a whole file, so long text is better spoken in shorter parts. */
+  readonly prefersShortParts?: boolean
   pause(): void
   resume(): void
   stop(): void

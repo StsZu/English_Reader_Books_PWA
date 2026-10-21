@@ -44,6 +44,8 @@ export class OpenAISpeechEngine implements ReplayableSpeech {
   /** Number of synthesis requests started in this page. */
   static synthesisCount = 0
 
+  readonly prefersShortParts = true
+
   synthesize: Synthesizer = OpenAISpeechEngine.defaultSynthesizer
   cacheNamespace = OpenAISpeechEngine.defaultCacheNamespace
   private downloads = new Map<string, Promise<string>>()

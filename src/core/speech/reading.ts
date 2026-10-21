@@ -10,6 +10,46 @@ export type ReadingState = 'idle' | 'loading' | 'playing' | 'paused'
 /** Delay before the single retry of a sentence that failed to play. */
 export const RETRY_DELAY_MS = 1000
 
+/** Longest part of a sentence sent to the AI voice at once; a whole long sentence takes too long to prepare. */
+export const SPEECH_PART_LENGTH = 160
+/** How far ahead audio is prepared: up to this many parts and this many characters. */
+export const PREFETCH_PARTS = 3
+export const PREFETCH_CHARS = 600
+
+/**
+ * Splits a long sentence into parts at clause boundaries (, ; : and dashes), then at spaces,
+ * each at most `limit` characters. Short sentences stay whole.
+ */
+export function speechParts(text: string, limit = SPEECH_PART_LENGTH): string[] {
+  if (text.length <= limit) return [text]
+  const clauses = text.split(/(?<=[,;:])\s+|\s+(?=[—–]\s)/u)
+  const pieces: string[] = []
+  for (const clause of clauses) {
+    if (clause.length <= limit) {
+      pieces.push(clause)
+      continue
+    }
+    let line = ''
+    for (const word of clause.split(/\s+/)) {
+      if (line && line.length + 1 + word.length > limit) {
+        pieces.push(line)
+        line = word
+      } else {
+        line = line ? `${line} ${word}` : word
+      }
+    }
+    if (line) pieces.push(line)
+  }
+  // Join neighbours while they fit, so parts are not needlessly short.
+  const parts: string[] = []
+  for (const piece of pieces) {
+    const last = parts.length - 1
+    if (last >= 0 && parts[last].length + 1 + piece.length <= limit) parts[last] = `${parts[last]} ${piece}`
+    else parts.push(piece)
+  }
+  return parts
+}
+
 const sameRef = (a: SentenceRef, b: SentenceRef) =>
   a.paragraph.chapter === b.paragraph.chapter && a.paragraph.paragraph === b.paragraph.paragraph && a.sentence === b.sentence
 
@@ -23,6 +63,8 @@ export class ReadingController {
   private generation = 0
   private queue: SentenceRef[] = []
   private index = 0
+  /** Part of the current sentence being spoken (see `speechParts`). */
+  private part = 0
   /** The current sentence was cut off by another sound: resuming plays it again from its start. */
   private interrupted = false
   /** Sentence chosen by the reader during the pause: resuming starts there. */
@@ -54,6 +96,7 @@ export class ReadingController {
     if (!engine) return
     const generation = ++this.generation
     this.index = index
+    this.part = 0
     this.interrupted = false
     this.chosen = null
     this.state.value = 'loading'
@@ -61,16 +104,41 @@ export class ReadingController {
     void this.run(engine, generation)
   }
 
+  private parts(engine: SpeechEngine, index: number): string[] {
+    const text = sentenceText(this.book, this.queue[index])
+    return engine.prefersShortParts ? speechParts(text) : [text]
+  }
+
+  /** Prepares the next parts while the current one plays, so a long sentence ahead is ready in time. */
+  private prefetchAhead(engine: SpeechEngine) {
+    let index = this.index
+    let parts = this.parts(engine, index)
+    let part = this.part + 1
+    let chars = 0
+    for (let count = 0; count < PREFETCH_PARTS && chars < PREFETCH_CHARS; count++) {
+      while (part >= parts.length) {
+        index += 1
+        if (index >= this.queue.length) return
+        parts = this.parts(engine, index)
+        part = 0
+      }
+      engine.prefetch(parts[part])
+      chars += parts[part].length
+      part += 1
+    }
+  }
+
   private async run(engine: SpeechEngine, generation: number) {
     let retried = false
     while (this.index < this.queue.length) {
       if (generation !== this.generation) return
       const ref = this.queue[this.index]
+      const parts = this.parts(engine, this.index)
       this.current.value = ref
       if (this.state.value !== 'paused') this.state.value = 'loading'
-      if (this.index + 1 < this.queue.length) engine.prefetch(sentenceText(this.book, this.queue[this.index + 1]))
+      this.prefetchAhead(engine)
       try {
-        await engine.speak(sentenceText(this.book, ref), () => {
+        await engine.speak(parts[this.part], () => {
           if (generation === this.generation && this.state.value === 'loading') this.state.value = 'playing'
         })
       } catch (error) {
@@ -93,7 +161,12 @@ export class ReadingController {
       }
       if (generation !== this.generation) return
       retried = false
-      this.index += 1
+      if (this.part + 1 < parts.length) {
+        this.part += 1
+      } else {
+        this.part = 0
+        this.index += 1
+      }
     }
     if (generation === this.generation) this.finish()
   }
@@ -157,6 +230,7 @@ export class ReadingController {
     this.engine = null
     this.queue = []
     this.index = 0
+    this.part = 0
     this.interrupted = false
     this.chosen = null
     this.state.value = 'idle'
