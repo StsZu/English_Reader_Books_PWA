@@ -1,0 +1,40 @@
+{
+  "name": "english-reader-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:live": "LIVE=1 vitest run tests/live",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "golden": "node --experimental-strip-types scripts/golden-compare.ts",
+    "size": "node scripts/size.mjs",
+    "check": "sh scripts/check-secrets.sh && node scripts/size.mjs"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.3",
+    "idb": "8.0.4",
+    "lucide-preact": "1.52.0",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@playwright/test": "1.58.2",
+    "@preact/preset-vite": "2.10.6",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.0.3",
+    "eslint": "10.12.0",
+    "fake-indexeddb": "6.2.5",
+    "happy-dom": "20.14.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1",
+    "vite": "7.3.7",
+    "vitest": "5.0.3"
+  }
+}

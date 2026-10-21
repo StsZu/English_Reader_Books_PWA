@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-test/
+build/
+test-results/
+playwright-report/
+coverage/
+.DS_Store
+.env
+.env.*
+tests/fixtures/external/
