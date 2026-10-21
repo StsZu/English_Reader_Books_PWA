@@ -120,10 +120,38 @@ export async function chatJSON<T>(
   return result
 }
 
+export const SPEECH_TIMEOUT_MS = 60_000
+
 /** Text-to-speech; returns MP3 bytes. */
 export async function speech(model: string, voice: string, input: string, instructions: string, signal?: AbortSignal): Promise<ArrayBuffer> {
-  const response = await post('audio/speech', { model, voice, input, instructions, response_format: 'mp3' }, 60_000, signal)
-  const data = await response.arrayBuffer()
-  if (data.byteLength <= 512) throw new AIError({ kind: 'badResponse', detail: 'порожнє аудіо' })
-  return data
+  // The audio arrives as a stream: the time limit covers the body too, not only the headers.
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, SPEECH_TIMEOUT_MS)
+  const onAbort = () => controller.abort()
+  signal?.addEventListener('abort', onAbort)
+  try {
+    const response = await post('audio/speech', { model, voice, input, instructions, response_format: 'mp3' }, SPEECH_TIMEOUT_MS, controller.signal)
+    // post() no longer forwards the abort once the headers arrived, so the body read races it.
+    const aborted = new Promise<never>((_, reject) => {
+      if (controller.signal.aborted) reject(abortError())
+      controller.signal.addEventListener('abort', () => {
+        response.body?.cancel().catch(() => {})
+        reject(abortError())
+      }, { once: true })
+    })
+    const data = await Promise.race([response.arrayBuffer(), aborted])
+    if (data.byteLength <= 512) throw new AIError({ kind: 'badResponse', detail: 'порожнє аудіо' })
+    return data
+  } catch (error) {
+    if (timedOut) throw new AIError({ kind: 'timeout' })
+    if (signal?.aborted) throw abortError()
+    throw error
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onAbort)
+  }
 }

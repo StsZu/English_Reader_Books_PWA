@@ -17,8 +17,7 @@ export function PlaybackBar({ model }: { model: ReaderModel }) {
       {state === 'idle' && (
         <Button variant="bordered" icon="play.fill" testID="playButton" onClick={() => {
           unlockAudio()
-          model.stopSentenceSpeech()
-          reading.play(model.position)
+          model.startReading()
         }}>Слухати</Button>
       )}
       {(state === 'loading' || state === 'playing') && (

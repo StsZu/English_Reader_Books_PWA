@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AIError, aiErrorText, needsSettings, type AIServiceError } from '../../src/contracts.ts'
-import { chatJSON, mapError, setKeyProvider, speech } from '../../src/core/ai/openai.ts'
+import { SPEECH_TIMEOUT_MS, chatJSON, mapError, setKeyProvider, speech } from '../../src/core/ai/openai.ts'
 import * as prompts from '../../src/core/ai/prompts.ts'
 import {
   OpenAITranslationProvider, TestTranslationProvider, TranslationStore, fragmentCacheKey, translateFragment, translationStats,
@@ -108,6 +108,20 @@ describe('OpenAI client', () => {
     const promise = chatJSON('m', 's', 'u', (v) => v, controller.signal)
     controller.abort()
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('times out speech whose audio stream never ends', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', async () => new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(1024)) },
+      }), { status: 200 }))
+      const result = kindOf(speech('gpt-4o-mini-tts', 'coral', 'Hi', 'i'))
+      await vi.advanceTimersByTimeAsync(SPEECH_TIMEOUT_MS + 10)
+      expect(await result).toBe('timeout')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects empty speech audio and returns MP3 bytes', async () => {

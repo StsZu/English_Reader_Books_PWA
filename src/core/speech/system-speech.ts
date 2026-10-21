@@ -18,12 +18,21 @@ export function bestEnglishVoice(voices: SpeechSynthesisVoice[] = synth()?.getVo
 /** WebKit's pause/resume is unreliable (V-08): if speech does not continue in time, the phrase restarts. */
 const RESUME_WATCHDOG_MS = 1000
 
+/** Rough speaking speed at rate 1, used to notice a phrase whose end event never came. */
+const CHARS_PER_SECOND = 14
+
+/** Longest a phrase may take before it is treated as stuck: twice the estimate plus 5 s. */
+export function phraseLimitMs(text: string, rate: number): number {
+  return (text.length / (CHARS_PER_SECOND * Math.max(0.5, rate))) * 2000 + 5000
+}
+
 export class SystemSpeechEngine implements SpeechEngine {
   private pending: { resolve: () => void; reject: (e: unknown) => void } | null = null
   private utterance: SpeechSynthesisUtterance | null = null
   private text = ''
   private paused = false
   private watchdog: ReturnType<typeof setTimeout> | null = null
+  private endWatchdog: ReturnType<typeof setInterval> | null = null
 
   constructor(public rate: number) {}
 
@@ -48,16 +57,39 @@ export class SystemSpeechEngine implements SpeechEngine {
     utterance.onend = () => this.finish(utterance)
     utterance.onerror = (event) => {
       if (utterance !== this.utterance) return
-      if (event.error === 'interrupted' || event.error === 'canceled') return
       const pending = this.pending
       this.clear()
-      pending?.reject(new Error(`${NO_SYSTEM_VOICE} (${event.error})`))
+      // Cut off by another phrase or by the system, not by stop(): the caller decides what to do next.
+      if (event.error === 'interrupted' || event.error === 'canceled') pending?.reject(abortError())
+      else pending?.reject(new Error(`${NO_SYSTEM_VOICE} (${event.error})`))
     }
     utterance.onresume = () => this.clearWatchdog()
     utterance.onboundary = () => this.clearWatchdog()
     this.utterance = utterance
     speech.speak(utterance)
     if (this.paused) speech.pause()
+    this.watchEnd(speech, utterance)
+  }
+
+  /** WebKit sometimes never sends `end`: finish when speech went quiet, fail when it runs far too long. */
+  private watchEnd(speech: SpeechSynthesis, utterance: SpeechSynthesisUtterance) {
+    this.clearEndWatchdog()
+    const limit = phraseLimitMs(this.text, utterance.rate)
+    let elapsed = 0
+    let quiet = 0
+    this.endWatchdog = setInterval(() => {
+      if (utterance !== this.utterance || this.paused) return
+      elapsed += 1000
+      quiet = speech.speaking || speech.pending ? 0 : quiet + 1000
+      if (quiet >= 2000) {
+        this.finish(utterance)
+      } else if (elapsed >= limit) {
+        const pending = this.pending
+        this.clear()
+        speech.cancel()
+        pending?.reject(new Error(`${NO_SYSTEM_VOICE} (не відповідає)`))
+      }
+    }, 1000)
   }
 
   prefetch() {}
@@ -108,8 +140,14 @@ export class SystemSpeechEngine implements SpeechEngine {
 
   private clear() {
     this.clearWatchdog()
+    this.clearEndWatchdog()
     this.pending = null
     this.utterance = null
+  }
+
+  private clearEndWatchdog() {
+    if (this.endWatchdog) clearInterval(this.endWatchdog)
+    this.endWatchdog = null
   }
 
   private clearWatchdog() {

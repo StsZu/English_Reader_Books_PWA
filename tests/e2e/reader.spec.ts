@@ -256,3 +256,25 @@ test('читання вголос: Слухати → Пауза → Продо�
   await expect(page.getByTestId('playButton')).toBeVisible()
   await expect(page.getByTestId('playbackStatus')).toContainText('Розділ 1 з 2')
 })
+
+test('читання вголос з вибраного речення; утримання речення посеред читання не зависає', async ({ page }) => {
+  await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
+  await word(page, 'eclipses').click()
+  await expect(page.getByTestId('translation-0-2-2')).toBeVisible()
+  await page.getByTestId('playButton').click()
+  await expect(page.getByTestId('pauseButton')).toBeVisible()
+  // Reading starts at the selected sentence, not at the top of the page.
+  await expect(page.locator('[data-p="2"] .s.active[data-s="2"]')).toBeVisible({ timeout: 5_000 })
+  await expect(page.locator('.s.active')).toHaveCount(1)
+
+  // A long press speaks the translated sentence: reading pauses and then goes on.
+  await page.waitForTimeout(800) // reading scrolls to the paragraph first
+  await longPress(page, word(page, 'eclipses'))
+  await expect(page.getByTestId('resumeButton')).toBeVisible()
+  if (await page.getByTestId('stopSentenceSpeech').isVisible()) await page.getByTestId('stopSentenceSpeech').click()
+  await page.getByTestId('resumeButton').click()
+  await expect(page.getByTestId('pauseButton')).toBeVisible()
+  await expect(page.locator('[data-p="2"] .s.active:is([data-s="1"], [data-s="3"])')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('stopButton').click()
+  await expect(page.getByTestId('playButton')).toBeVisible()
+})

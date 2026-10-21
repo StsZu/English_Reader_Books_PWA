@@ -137,6 +137,13 @@ export class ReaderModel {
     return { chapter: this.chapter.value, paragraph: this.topParagraph.value }
   }
 
+  /** «Слухати»: from the selected sentence, otherwise from the top paragraph. */
+  startReading() {
+    this.stopSentenceSpeech()
+    const active = this.activeSentence.value
+    this.reading.play(active && this.isValid(active) ? active : this.position)
+  }
+
   savePosition() {
     if (this.ready.value) void savePosition(this.book.id, this.position)
   }
@@ -165,6 +172,7 @@ export class ReaderModel {
   private setActive(ref: SentenceRef | null) {
     if (sameSentence(this.activeSentence.value, ref) || (!ref && !this.activeSentence.value)) return
     this.activeSentence.value = ref
+    this.reading.choose(ref)
     this.stopSentenceSpeech()
     this.sentenceSpeechNotice.value = null
     if (ref) void this.refreshReplayable({ kind: 'sentence', ref })
@@ -525,7 +533,7 @@ export class ReaderModel {
     const current = this.sentenceSpeech.value
     if (current && speechKeyID(current.key) === speechKeyID(key) && current.phase === 'preparing') return
     this.stopSentenceSpeech()
-    this.reading.pause()
+    this.reading.interrupt()
     stopPronunciation()
     this.configureSentenceSpeaker()
     const token = ++this.speechCounter
@@ -634,6 +642,7 @@ export class ReaderModel {
 
   pronounce(text: string) {
     this.stopSentenceSpeech()
+    this.reading.interrupt()
     this.pronunciationNotice.value = null
     void pronounceWord(text).then((result) => {
       if (result.fallbackReason) this.pronunciationNotice.value = result.fallbackReason

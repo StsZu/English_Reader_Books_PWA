@@ -4,8 +4,8 @@ import { ReplayMissingError, abortError, type SpeechEngine } from '../../src/con
 import type { Book } from '../../src/core/model/book.ts'
 import { setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
 import { OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
-import { ReadingController } from '../../src/core/speech/reading.ts'
-import { SystemSpeechEngine, bestEnglishVoice } from '../../src/core/speech/system-speech.ts'
+import { RETRY_DELAY_MS, ReadingController } from '../../src/core/speech/reading.ts'
+import { SystemSpeechEngine, bestEnglishVoice, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
 
 // MARK: - Minimal Cache Storage (happy-dom has none)
 
@@ -201,6 +201,28 @@ describe('SystemSpeechEngine', () => {
     vi.useRealTimers()
   })
 
+  it('reports a phrase cut off by another sound as AbortError, not as an error', async () => {
+    const engine = new SystemSpeechEngine(1)
+    const done = engine.speak('Cut.', () => {})
+    const u = fake.current as unknown as { onerror: (e: { error: string }) => void }
+    u.onerror({ error: 'interrupted' })
+    await expect(done).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('finishes when the end event never comes and fails a phrase that runs far too long', async () => {
+    vi.useFakeTimers()
+    const engine = new SystemSpeechEngine(1)
+    const quiet = engine.speak('Quiet.', () => {})
+    fake.speaking = false
+    vi.advanceTimersByTime(2100)
+    await expect(quiet).resolves.toBeUndefined()
+    const stuck = engine.speak('Stuck.', () => {})
+    const result = expect(stuck).rejects.toThrow('не відповідає')
+    vi.advanceTimersByTime(phraseLimitMs('Stuck.', 1) + 1000)
+    await result
+    vi.useRealTimers()
+  })
+
   it('prefers higher-quality voices, then British English', () => {
     const voice = (name: string, lang: string, localService = true) => ({ name, lang, localService }) as SpeechSynthesisVoice
     const voices = [voice('Daniel', 'en-GB'), voice('Samantha (Enhanced)', 'en-US'), voice('Thomas', 'fr-FR')]
@@ -236,6 +258,12 @@ class ScriptedEngine implements SpeechEngine {
     const p = this.pending
     this.pending = null
     p?.resolve()
+  }
+  /** Another sound took the audio: the phrase ends with AbortError although nobody called stop(). */
+  cutOff() {
+    const p = this.pending
+    this.pending = null
+    p?.reject(abortError())
   }
   prefetch() {}
   pause() { this.pauses++ }
@@ -290,11 +318,108 @@ describe('ReadingController', () => {
     await tick()
     expect(controller.state.value).toBe('idle')
 
-    const failing: SpeechEngine = { ...engine, speak: () => Promise.reject(new Error('Немає звуку')), prefetch() {}, pause() {}, resume() {}, stop() {} }
+    vi.useFakeTimers()
+    let attempts = 0
+    const failing: SpeechEngine = {
+      ...engine, speak: () => { attempts++; return Promise.reject(new Error('Немає звуку')) }, prefetch() {}, pause() {}, resume() {}, stop() {},
+    }
     const second = new ReadingController(book, () => failing)
     second.play({ chapter: 0, paragraph: 0 })
-    await tick()
+    await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS + 10)
+    expect(attempts).toBe(2)
     expect(second.errorMessage.value).toBe('Немає звуку')
     expect(second.state.value).toBe('idle')
+    vi.useRealTimers()
+  })
+
+  it('retries a failed sentence once and goes on', async () => {
+    vi.useFakeTimers()
+    const engine = new ScriptedEngine()
+    let failed = false
+    const flaky: SpeechEngine = {
+      speak: (text, onStart) => {
+        if (!failed) { failed = true; return Promise.reject(new Error('аудіо зависло')) }
+        return engine.speak(text, onStart)
+      },
+      prefetch() {}, pause() {}, resume() {}, stop: () => engine.stop(),
+    }
+    const controller = new ReadingController(book, () => flaky)
+    controller.play({ chapter: 0, paragraph: 0 })
+    await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS + 10)
+    expect(engine.spoken).toEqual(['A.'])
+    expect(controller.state.value).toBe('playing')
+    expect(controller.errorMessage.value).toBeNull()
+    controller.stop()
+    vi.useRealTimers()
+  })
+
+  it('starts at the selected sentence and reads on', async () => {
+    const engine = new ScriptedEngine()
+    const controller = new ReadingController(book, () => engine)
+    controller.play({ paragraph: { chapter: 0, paragraph: 0 }, sentence: 1 })
+    await tick()
+    expect(label([controller.current.value!])).toEqual(['0-0-1'])
+    engine.finishCurrent()
+    await tick()
+    engine.finishCurrent()
+    await tick()
+    expect(engine.spoken).toEqual(['B.', 'C.', 'D.'])
+    controller.stop()
+  })
+
+  it('a sentence cut off by another sound pauses reading; resume plays it again', async () => {
+    const engine = new ScriptedEngine()
+    const controller = new ReadingController(book, () => engine)
+    controller.play({ chapter: 0, paragraph: 0 })
+    await tick()
+    engine.cutOff()
+    await tick()
+    expect(controller.state.value).toBe('paused')
+    controller.resume()
+    await tick()
+    expect(controller.state.value).toBe('playing')
+    expect(engine.spoken).toEqual(['A.', 'A.'])
+    engine.finishCurrent()
+    await tick()
+    expect(engine.spoken).toEqual(['A.', 'A.', 'B.'])
+    controller.stop()
+  })
+
+  it('interrupt releases the audio and resume replays the current sentence', async () => {
+    const engine = new ScriptedEngine()
+    const controller = new ReadingController(book, () => engine)
+    controller.play({ chapter: 0, paragraph: 1 })
+    await tick()
+    controller.pause()
+    controller.interrupt()
+    await tick()
+    expect(controller.state.value).toBe('paused')
+    controller.resume()
+    await tick()
+    expect(engine.spoken).toEqual(['C.', 'C.'])
+    expect(engine.resumes).toBe(0)
+    controller.stop()
+  })
+
+  it('resumes from a sentence chosen during the pause, not from one chosen while playing', async () => {
+    const engine = new ScriptedEngine()
+    const controller = new ReadingController(book, () => engine)
+    controller.play({ chapter: 0, paragraph: 0 })
+    await tick()
+    controller.choose({ paragraph: { chapter: 1, paragraph: 0 }, sentence: 0 })
+    controller.pause()
+    controller.resume()
+    expect(engine.resumes).toBe(1)
+    controller.pause()
+    controller.choose({ paragraph: { chapter: 0, paragraph: 1 }, sentence: 0 })
+    controller.resume()
+    await tick()
+    expect(engine.spoken).toEqual(['A.', 'C.'])
+    controller.pause()
+    controller.choose({ paragraph: { chapter: 0, paragraph: 0 }, sentence: 0 })
+    controller.resume()
+    await tick()
+    expect(engine.spoken).toEqual(['A.', 'C.', 'A.'])
+    controller.stop()
   })
 })

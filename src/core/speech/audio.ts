@@ -11,6 +11,9 @@ export interface AudioBackend {
   stop(): void
 }
 
+/** Playback that has not moved for this long while it should be playing is reported as stuck. */
+export const STALL_TIMEOUT_MS = 15_000
+
 const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='
 
 class ElementBackend implements AudioBackend {
@@ -33,9 +36,29 @@ class ElementBackend implements AudioBackend {
     return new Promise<void>((resolve, reject) => {
       const onEnded = () => finish(() => resolve())
       const onError = () => finish(() => reject(new Error('аудіо не відтворюється')))
+      // Paused by the system (call, Siri, headphones out) rather than by us: the caller resumes later.
+      const onPause = () => {
+        if (!this.paused && !audio.ended) finish(() => reject(abortError()))
+      }
+      let lastTime = -1
+      let lastMove = Date.now()
+      const watchdog = setInterval(() => {
+        if (this.paused || audio.ended) {
+          lastMove = Date.now()
+          return
+        }
+        if (audio.currentTime !== lastTime) {
+          lastTime = audio.currentTime
+          lastMove = Date.now()
+        } else if (Date.now() - lastMove >= STALL_TIMEOUT_MS) {
+          finish(() => reject(new Error('аудіо зависло')))
+        }
+      }, 1000)
       const cleanup = () => {
+        clearInterval(watchdog)
         audio.removeEventListener('ended', onEnded)
         audio.removeEventListener('error', onError)
+        audio.removeEventListener('pause', onPause)
       }
       const finish = (action: () => void) => {
         if (this.pending?.cleanup !== cleanup) return
@@ -46,6 +69,7 @@ class ElementBackend implements AudioBackend {
       this.pending = { resolve, reject, cleanup }
       audio.addEventListener('ended', onEnded)
       audio.addEventListener('error', onError)
+      audio.addEventListener('pause', onPause)
       audio.src = url
       audio.playbackRate = rate
       audio.defaultPlaybackRate = rate
@@ -54,8 +78,12 @@ class ElementBackend implements AudioBackend {
         return
       }
       audio.play().then(onStart, (error: unknown) => {
-        if ((error as { name?: string })?.name === 'AbortError') return
-        finish(() => reject(error instanceof Error ? error : new Error('аудіо не відтворюється')))
+        const name = (error as { name?: string })?.name
+        // AbortError: our own pause() before playback began — resume() starts it again.
+        if (name === 'AbortError' && this.paused) return
+        // Interrupted, or iOS refused to start without a tap: the caller resumes on the next tap.
+        if (name === 'AbortError' || name === 'NotAllowedError') finish(() => reject(abortError()))
+        else finish(() => reject(error instanceof Error ? error : new Error('аудіо не відтворюється')))
       })
     })
   }
@@ -67,7 +95,15 @@ class ElementBackend implements AudioBackend {
 
   resume() {
     this.paused = false
-    if (this.pending) this.element?.play().catch(() => {})
+    const pending = this.pending
+    if (!pending) return
+    this.element?.play().catch(() => {
+      // Could not continue (no tap, interrupted): give the audio back so the caller can restart.
+      if (this.paused || this.pending !== pending) return
+      this.pending = null
+      pending.cleanup()
+      pending.reject(abortError())
+    })
   }
 
   stop() {
