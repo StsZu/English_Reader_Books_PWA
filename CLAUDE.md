@@ -28,4 +28,4 @@ PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_
 
 ## Стан (2026-10-21)
 
-Хвилі 0–5 виконано (`specs/001-pwa-copy/tasks.md`), проміжне узгодження — `specs/001-pwa-copy/alignment.md`. Відкрито: T55 (живі тести, платно), T60 (GitHub + Cloudflare Pages, потрібен дозвіл), T61 (ручна перевірка на iPad за чек-листом).
+Хвилі 0–5 виконано (`specs/001-pwa-copy/tasks.md`), проміжне узгодження — `specs/001-pwa-copy/alignment.md`. Розгорнуто: https://english-reader-books-pwa.sts-zubar.workers.dev/ (Cloudflare, збірка з `main` репозиторію https://github.com/StsZu/English_Reader_Books_PWA). Відкрито: T55 (живі тести, платно), T61 (ручна перевірка на iPad за чек-листом).
