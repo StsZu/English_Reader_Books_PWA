@@ -220,7 +220,7 @@ function Pronunciation() {
   )
 }
 
-export function SettingsTab({ onManageDictionaries }: { onManageDictionaries: () => void }) {
+export function SettingsTab({ onManageDictionaries, onShowShortcuts }: { onManageDictionaries: () => void; onShowShortcuts: () => void }) {
   return (
     <div class="rp-scroll rp-settings">
       <ThemeTiles />
@@ -230,6 +230,12 @@ export function SettingsTab({ onManageDictionaries }: { onManageDictionaries: ()
         <DictionaryTranslation onManage={onManageDictionaries} />
       </Section>
       <Section id="pronunciation" title="Вимова слів" icon="speaker.wave.2"><Pronunciation /></Section>
+      <button type="button" class="rp-link-row rp-shortcuts-row" onClick={onShowShortcuts} data-testid="showShortcuts">
+        <span class="disclosure-icon"><Icon name="keyboard" size={22} /></span>
+        <span class="disclosure-title">Швидкі клавіші</span>
+        <span class="rp-font-value">?</span>
+        <Icon name="chevron.right" size={13} strokeWidth={2.6} class="rp-font-chevron" />
+      </button>
     </div>
   )
 }

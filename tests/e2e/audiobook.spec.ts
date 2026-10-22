@@ -1,4 +1,5 @@
-// Audiobook player (specs/002-audio-player, stage A): adding files, scrubber, ±5 s, speed, tracks, place, removal.
+// Audiobook player (specs/002-audio-player, stage A): adding files, scrubber, ±5 s, speed, tracks, place, removal;
+// keyboard shortcuts (specs/003-resume-and-shortcuts).
 import { expect, test, type Page } from '@playwright/test'
 
 const demo = 'The Adventures of Sherlock Holmes (excerpt)'
@@ -149,4 +150,83 @@ test('аудіокнига: перехід на іншу доріжку під �
   await expect(page.getByTestId('audioDuration')).toHaveText('1:30')
   await expect(page.getByTestId('audioPause')).toBeVisible()
   await expect(page.getByTestId('audioTime')).not.toHaveText('0:00', { timeout: 5_000 })
+})
+
+test('аудіокнига з клавіатури: пробіл, стрілки, доріжки, швидкість, перемикання, список клавіш', async ({ page }) => {
+  await openDemo(page)
+  await addFiles(page)
+  await page.getByTestId('audioSheetDone').click()
+  await expect(page.getByTestId('audioSheet')).toHaveCount(0)
+  const time = page.getByTestId('audioTime')
+
+  // Space plays and pauses; after a tap on the button Space does not press it a second time.
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('audioPause')).toBeVisible()
+  await expect(time).not.toHaveText('0:00', { timeout: 5_000 })
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('audioPlay')).toBeVisible()
+  await page.getByTestId('audioPlay').click()
+  await expect(page.getByTestId('audioPause')).toBeVisible()
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('audioPlay')).toBeVisible()
+  await page.waitForTimeout(400)
+  await expect(page.getByTestId('audioPlay')).toBeVisible()
+
+  // Arrows: ±5 s, with Shift ±30 s — also when the scrubber has the focus.
+  const scrubber = (await page.getByTestId('audioScrubber').boundingBox())!
+  await page.mouse.click(scrubber.x + scrubber.width / 2, scrubber.y + scrubber.height / 2)
+  await expect(time).toHaveText(/^(0:59|1:00|1:01)$/)
+  const seconds = async () => {
+    const [m, s] = (await time.textContent())!.split(':').map(Number)
+    return m * 60 + s
+  }
+  const start = await seconds()
+  await page.keyboard.press('ArrowLeft')
+  await expect.poll(seconds).toBe(start - 5)
+  await page.keyboard.press('Shift+ArrowLeft')
+  await expect.poll(seconds).toBe(start - 35)
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(seconds).toBe(start - 30)
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect.poll(seconds).toBe(start)
+
+  // «,» / «.»: tracks.
+  await page.keyboard.press('Period')
+  await expect(page.getByTestId('audioTrackButton')).toHaveText('Доріжка 2 з 2')
+  await page.keyboard.press('Comma')
+  await expect(page.getByTestId('audioTrackButton')).toHaveText('Доріжка 1 з 2')
+
+  // «[» / «]»: speed, without going past the ends.
+  await page.keyboard.press('BracketRight')
+  await expect(page.getByTestId('audioRate')).toHaveText('1,15×')
+  await page.keyboard.press('BracketRight')
+  await expect(page.getByTestId('audioRate')).toHaveText('1,15×')
+  await page.keyboard.press('BracketLeft')
+  await page.keyboard.press('BracketLeft')
+  await expect(page.getByTestId('audioRate')).toHaveText('0,9×')
+
+  // A: audiobook ↔ voice.
+  await page.keyboard.press('KeyA')
+  await expect(page.getByTestId('playButton')).toBeVisible()
+  await page.keyboard.press('KeyA')
+  await expect(page.getByTestId('audioBar')).toBeVisible()
+
+  // «?»: the list of keys; while it is open the keys do nothing; Esc closes it.
+  await page.keyboard.press('Shift+Slash')
+  await expect(page.getByTestId('shortcutsSheet')).toBeVisible()
+  await expect(page.getByTestId('shortcutsSheet')).toContainText('Пробіл')
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: 'build/visual/shortcuts-sheet.png' })
+  await page.keyboard.press('Space')
+  await page.keyboard.press('KeyA')
+  await expect(page.getByTestId('audioPlay')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('shortcutsSheet')).toHaveCount(0)
+
+  // The list is also in the reading settings.
+  await page.getByTestId('appearanceButton').click()
+  await page.getByTestId('showShortcuts').click()
+  await expect(page.getByTestId('shortcutsSheet')).toBeVisible()
+  await page.getByTestId('shortcutsDone').click()
+  await expect(page.getByTestId('shortcutsSheet')).toHaveCount(0)
 })

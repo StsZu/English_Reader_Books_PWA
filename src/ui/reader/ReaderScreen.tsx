@@ -16,6 +16,8 @@ import { Paragraph } from './Paragraph.tsx'
 import { ParallelPane } from './ParallelPane.tsx'
 import { ChapterNav, PlaybackBar } from './PlaybackBar.tsx'
 import { AudioSheet } from './AudioSheet.tsx'
+import { ShortcutsSheet } from './ShortcutsSheet.tsx'
+import { useReaderShortcuts } from './shortcuts.ts'
 import { attachGestures } from './gestures.ts'
 import './reader.css'
 
@@ -52,6 +54,8 @@ function Reader({ model }: { model: ReaderModel }) {
   const scroller = useRef<HTMLDivElement>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<PanelTab>('settings')
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  useReaderShortcuts(model, () => setShortcutsOpen(true))
   const scroll = useRef({ last: 0, anchor: null as number | null, touching: false, user: false, programmatic: false, idle: 0, save: 0 })
 
   const chapterIndex = model.chapter.value
@@ -296,9 +300,14 @@ function Reader({ model }: { model: ReaderModel }) {
       </div>
       <PlaybackBar model={model} />
       <AudioSheet model={model} />
+      <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ReaderPanel open={panelOpen} onClose={() => setPanelOpen(false)} tab={panelTab} onTab={setPanelTab}
         book={model.book} chapter={chapterIndex}
         onSelectChapter={(index) => model.goToChapter(index)}
+        onShowShortcuts={() => {
+          setPanelOpen(false)
+          setShortcutsOpen(true)
+        }}
         onOpenPlace={(place) => {
           setPanelOpen(false)
           model.show(place)

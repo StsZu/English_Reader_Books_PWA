@@ -278,3 +278,23 @@ test('читання вголос з вибраного речення; утри
   await page.getByTestId('stopButton').click()
   await expect(page.getByTestId('playButton')).toBeVisible()
 })
+
+test('читання голосом з клавіатури: пробіл — «Слухати» / «Пауза» / «Продовжити», Enter — вибране речення', async ({ page }) => {
+  await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
+  await word(page, 'eclipses').click()
+  await expect(page.getByTestId('translation-0-2-2')).toBeVisible()
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('pauseButton')).toBeVisible()
+  await expect(page.locator('[data-p="2"] .s.active[data-s="2"]')).toBeVisible({ timeout: 5_000 })
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('resumeButton')).toBeVisible()
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('pauseButton')).toBeVisible()
+  await page.getByTestId('stopButton').click()
+  await expect(page.getByTestId('playButton')).toBeVisible()
+
+  // Enter: the selected sentence once, as a long press.
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('stopSentenceSpeech')).toBeVisible()
+  await page.getByTestId('stopSentenceSpeech').click()
+})

@@ -22,6 +22,7 @@ export interface ReaderPanelProps {
   chapter: number
   onSelectChapter: (index: number) => void
   onOpenPlace: (place: SavedPlace) => void
+  onShowShortcuts: () => void
 }
 
 const tabs: { value: ReaderPanelTab; label: string; testID: string }[] = [
@@ -54,7 +55,7 @@ function Contents({ book, chapter, onSelect }: { book: Book; chapter: number; on
   )
 }
 
-export function ReaderPanel({ open, onClose, tab, onTab, book, chapter, onSelectChapter, onOpenPlace }: ReaderPanelProps) {
+export function ReaderPanel({ open, onClose, tab, onTab, book, chapter, onSelectChapter, onOpenPlace, onShowShortcuts }: ReaderPanelProps) {
   const [dictionaries, setDictionaries] = useState(false)
   useEffect(() => {
     if (!open) {
@@ -77,7 +78,7 @@ export function ReaderPanel({ open, onClose, tab, onTab, book, chapter, onSelect
             </button>
           </div>
           <div class="rp-divider rp-header-divider" />
-          {tab === 'settings' && <SettingsTab onManageDictionaries={() => setDictionaries(true)} />}
+          {tab === 'settings' && <SettingsTab onManageDictionaries={() => setDictionaries(true)} onShowShortcuts={onShowShortcuts} />}
           {tab === 'contents' && (
             <Contents book={book} chapter={chapter} onSelect={(index) => { onSelectChapter(index); onClose() }} />
           )}

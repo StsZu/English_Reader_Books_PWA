@@ -19,7 +19,7 @@ function mount(tab: ReaderPanelTab = 'settings', handlers: Partial<{ onClose: ()
   act(() => {
     render(
       <ReaderPanel open tab={tab} onTab={() => {}} book={book} chapter={0}
-        onClose={handlers.onClose ?? (() => {})} onSelectChapter={handlers.onSelectChapter ?? (() => {})} onOpenPlace={() => {}} />,
+        onClose={handlers.onClose ?? (() => {})} onSelectChapter={handlers.onSelectChapter ?? (() => {})} onOpenPlace={() => {}} onShowShortcuts={() => {}} />,
       root,
     )
   })

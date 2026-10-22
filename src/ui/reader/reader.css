@@ -416,3 +416,45 @@
   .scrubber-time { min-width: 44px; }
   .pane-row { padding: 0 12px; }
 }
+
+/* MARK: Keyboard shortcuts sheet */
+
+.shortcuts {
+  margin: 0;
+  padding: 8px 20px 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.shortcut-row + .shortcut-row { border-top: 0.5px solid var(--separator); }
+
+.shortcut-row dt {
+  flex: 0 0 132px;
+}
+
+.shortcut-row dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.shortcut-row kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--tertiary-fill);
+  font: 600 14px/1.4 var(--font-ui, inherit);
+  white-space: nowrap;
+}
+
+.shortcuts-note {
+  margin: 12px 20px 20px;
+  color: var(--secondary-label);
+  font-size: 13px;
+  line-height: 1.4;
+}

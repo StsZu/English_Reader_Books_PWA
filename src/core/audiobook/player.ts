@@ -28,8 +28,9 @@ export interface MediaElement {
 
 export const SKIP_SECONDS = 5
 export const RATES = [0.75, 0.9, 1, 1.15]
-/** «Слухати» after a pause starts a little earlier: the sound cut off at the pause was still on its way to the speaker. */
-export const RESUME_REWIND_SECONDS = 1
+/** «Слухати» after a pause starts a little earlier: the sound cut off at the pause was still on its way to the speaker
+ * (about this long on iPad; a whole second was heard as a repeated word). */
+export const RESUME_REWIND_SECONDS = 0.3
 /** After a long pause (or reopening the book) it goes back further, to pick up the thread. */
 export const LONG_PAUSE_MS = 5 * 60_000
 export const LONG_PAUSE_REWIND_SECONDS = 3

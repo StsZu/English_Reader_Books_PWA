@@ -434,3 +434,12 @@
 .rp-header .tab:focus {
   outline: none;
 }
+
+/* «Швидкі клавіші» row: looks like a collapsed section. */
+.rp-shortcuts-row {
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-medium);
+  background: var(--secondary-grouped-background);
+  color: var(--label);
+}

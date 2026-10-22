@@ -14,7 +14,8 @@ import { OpenAISpeechEngine } from '../../core/speech/openai-speech.ts'
 import { SystemSpeechEngine } from '../../core/speech/system-speech.ts'
 import { currentVoiceEngine, pronounceWord, stopPronunciation } from '../../core/speech/engines.ts'
 import { ReadingController } from '../../core/speech/reading.ts'
-import { AudiobookPlayer } from '../../core/audiobook/player.ts'
+import { AudiobookPlayer, RATES } from '../../core/audiobook/player.ts'
+import { unlockAudio } from '../../core/speech/audio.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import {
@@ -156,6 +157,58 @@ export class ReaderModel {
     this.stopSentenceSpeech()
     const active = this.activeSentence.value
     this.reading.play(active && this.isValid(active) ? active : this.position)
+  }
+
+  // MARK: Keyboard (specs/003-resume-and-shortcuts)
+
+  /** The bottom bar shows the audiobook player. */
+  get audioMode(): boolean {
+    return this.audiobook.hasAudio && this.barMode.value === 'audio'
+  }
+
+  /** Space: «Слухати» / «Пауза» of the player in the bottom bar. */
+  toggleListening() {
+    if (this.audioMode) {
+      this.audiobook.toggle()
+      return
+    }
+    const state = this.reading.state.value
+    if (state === 'loading' || state === 'playing') {
+      this.reading.pause()
+      return
+    }
+    unlockAudio()
+    if (state === 'paused') {
+      this.stopSentenceSpeech()
+      this.reading.resume()
+    } else {
+      this.startReading()
+    }
+  }
+
+  /** One step slower (-1) or faster (+1) through the audiobook speeds. */
+  stepRate(direction: -1 | 1) {
+    const index = RATES.indexOf(this.audiobook.rate.value)
+    const next = RATES[Math.min(RATES.length - 1, Math.max(0, (index < 0 ? RATES.indexOf(1) : index) + direction))]
+    if (next !== this.audiobook.rate.value) this.audiobook.setRate(next)
+  }
+
+  /** «Аудіокнига» ↔ «Голос», as the buttons in the bar. */
+  switchBarMode() {
+    if (!this.audiobook.hasAudio) return
+    if (this.barMode.value === 'audio') {
+      this.audiobook.pause()
+      this.barMode.value = 'voice'
+    } else {
+      this.reading.stop()
+      this.barMode.value = 'audio'
+    }
+  }
+
+  /** Enter: the selected sentence once, as a long press. */
+  speakActiveSentence() {
+    const active = this.activeSentence.value
+    if (active) this.speakSentence(active, false)
   }
 
   savePosition() {
