@@ -15,6 +15,7 @@ import { ReaderModel } from './model.ts'
 import { Paragraph } from './Paragraph.tsx'
 import { ParallelPane } from './ParallelPane.tsx'
 import { ChapterNav, PlaybackBar } from './PlaybackBar.tsx'
+import { AudioSheet } from './AudioSheet.tsx'
 import { attachGestures } from './gestures.ts'
 import './reader.css'
 
@@ -294,6 +295,7 @@ function Reader({ model }: { model: ReaderModel }) {
         </div>
       </div>
       <PlaybackBar model={model} />
+      <AudioSheet model={model} />
       <ReaderPanel open={panelOpen} onClose={() => setPanelOpen(false)} tab={panelTab} onTab={setPanelTab}
         book={model.book} chapter={chapterIndex}
         onSelectChapter={(index) => model.goToChapter(index)}

@@ -168,6 +168,12 @@ export interface MediaSessionHandlers {
   play?: () => void
   pause?: () => void
   stop?: () => void
+  /** Audiobook controls on the lock screen. */
+  seekbackward?: () => void
+  seekforward?: () => void
+  seekto?: (time: number) => void
+  previoustrack?: () => void
+  nexttrack?: () => void
 }
 
 export function setMediaSessionHandlers(handlers: MediaSessionHandlers | null, title = 'English Reader') {
@@ -177,12 +183,34 @@ export function setMediaSessionHandlers(handlers: MediaSessionHandlers | null, t
     if (handlers) {
       session.metadata = typeof MediaMetadata !== 'undefined' ? new MediaMetadata({ title, artist: 'English Reader' }) : null
     }
-    const actions: [MediaSessionAction, (() => void) | undefined][] = [
+    const seekto = handlers?.seekto
+    const actions: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
       ['play', handlers?.play], ['pause', handlers?.pause], ['stop', handlers?.stop],
+      ['seekbackward', handlers?.seekbackward], ['seekforward', handlers?.seekforward],
+      ['seekto', seekto ? (details) => { if (details.seekTime !== undefined) seekto(details.seekTime) } : undefined],
+      ['previoustrack', handlers?.previoustrack], ['nexttrack', handlers?.nexttrack],
     ]
-    for (const [action, handler] of actions) session.setActionHandler(action, handler ? () => handler() : null)
+    for (const [action, handler] of actions) {
+      try {
+        session.setActionHandler(action, handler ?? null)
+      } catch {
+        // Not every action is supported everywhere.
+      }
+    }
   } catch {
-    // Not every action is supported everywhere.
+    // Media Session is optional.
+  }
+}
+
+/** Lock-screen progress of the audiobook. */
+export function setMediaPosition(duration: number, position: number, playbackRate: number) {
+  const session = (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession
+  try {
+    if (session?.setPositionState && Number.isFinite(duration) && duration > 0) {
+      session.setPositionState({ duration, position: Math.min(Math.max(0, position), duration), playbackRate })
+    }
+  } catch {
+    // Not supported.
   }
 }
 

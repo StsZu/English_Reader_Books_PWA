@@ -1,10 +1,17 @@
 // Port of ReaderView.swift → PlaybackBar and ChapterNavigation.
-import { Button, ProgressSpinner } from '../components/index.ts'
+import { Button, IconButton, ProgressSpinner } from '../components/index.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
+import { AudioBar } from './AudioBar.tsx'
 import type { ReaderModel } from './model.ts'
 
 export function PlaybackBar({ model }: { model: ReaderModel }) {
+  if (model.audiobook.tracks.value.length > 0 && model.barMode.value === 'audio') return <AudioBar model={model} />
+  return <VoiceBar model={model} />
+}
+
+function VoiceBar({ model }: { model: ReaderModel }) {
   const reading = model.reading
+  const hasAudio = model.audiobook.tracks.value.length > 0
   const state = reading.state.value
   const status = {
     idle: `Розділ ${model.chapter.value + 1} з ${model.book.chapters.length} · абзац ${model.topParagraph.value + 1}`,
@@ -36,6 +43,14 @@ export function PlaybackBar({ model }: { model: ReaderModel }) {
       )}
       <span class="pane-spacer" />
       <span class="playback-status" data-testid="playbackStatus">{status}</span>
+      <IconButton icon="headphones" label={hasAudio ? 'Аудіокнига' : 'Додати аудіокнигу'} testID="audiobookMode" onClick={() => {
+        if (hasAudio) {
+          reading.stop()
+          model.barMode.value = 'audio'
+        } else {
+          model.audioSheetOpen.value = true
+        }
+      }} />
     </footer>
   )
 }

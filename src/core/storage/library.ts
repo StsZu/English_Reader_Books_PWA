@@ -4,6 +4,7 @@ import { summarize, type Book, type BookSummary } from '../model/book.ts'
 import { STORES, clearStore, deletePrefix, deleteValue, getValue, setValue } from './db.ts'
 import { clearPosition } from './positions.ts'
 import { resetAllSettings } from './settings.ts'
+import { clearAllAudio, deleteAudio } from '../audiobook/store.ts'
 
 const INDEX = 'library'
 const DEMO_FLAG = 'demoSeeded.v1'
@@ -36,6 +37,7 @@ export async function deleteBook(id: string): Promise<void> {
   await clearPosition(id)
   await deletePrefix('translations', `${id}|`)
   await deletePrefix('fragments', `${id}|`)
+  await deleteAudio(id)
 }
 
 /** Adds the bundled demo book on first launch so the reader is usable immediately. */
@@ -53,6 +55,7 @@ export async function seedDemoIfNeeded(loadDemo: () => Promise<Book | null>): Pr
 /** Test hook: wipes all imported books, caches, saved data and settings. */
 export async function resetAll(): Promise<void> {
   for (const store of STORES) await clearStore(store)
+  await clearAllAudio()
   books.value = []
   try {
     if (typeof caches !== 'undefined') await caches.delete('tts')

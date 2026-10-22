@@ -34,3 +34,19 @@ export function formatDayMonth(date: Date): string {
 export function scaleLabel(value: number, digits = 1): string {
   return `${formatNumber(value, digits, digits)}×`
 }
+
+/** "4:05", "1:02:09" (audio time). */
+export function formatTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = String(total % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
+}
+
+/** "820 КБ", "12,4 МБ", "1,2 ГБ". */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${formatNumber(Math.max(1, Math.round(bytes / 1024)), 0)} КБ`
+  if (bytes < 1024 ** 3) return `${formatNumber(bytes / 1024 ** 2, 1)} МБ`
+  return `${formatNumber(bytes / 1024 ** 3, 1)} ГБ`
+}

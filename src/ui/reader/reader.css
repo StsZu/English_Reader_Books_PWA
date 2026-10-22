@@ -219,7 +219,200 @@
   white-space: nowrap;
 }
 
+/* MARK: Audiobook bar (specs/002-audio-player, stage A) */
+
+.audio-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.audio-chip {
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--tertiary-fill);
+  color: var(--label);
+  font: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.skip-button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.skip-label {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.scrubber-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scrubber-time {
+  min-width: 52px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--secondary-label);
+}
+
+.scrubber-time.is-end { text-align: right; }
+
+/* The hit area is 44 px tall; the visible track is thin, the thumb large enough for a finger. */
+.scrubber {
+  position: relative;
+  flex: 1;
+  height: var(--hit);
+  touch-action: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.scrubber[aria-disabled='true'] { cursor: default; opacity: 0.5; }
+
+.scrubber-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: var(--system-fill);
+  overflow: hidden;
+}
+
+.scrubber.is-dragging .scrubber-track { height: 8px; margin-top: -4px; border-radius: 4px; }
+
+.scrubber-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.scrubber-thumb {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s;
+}
+
+.scrubber.is-dragging .scrubber-thumb { transform: scale(1.25); }
+.scrubber:focus-visible .scrubber-thumb { box-shadow: 0 0 0 3px var(--accent-tint), 0 0.5px 4px rgba(0, 0, 0, 0.25); }
+
+.scrubber-bubble {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--label);
+  color: var(--reader-bg);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.audio-sheet { padding: 8px 20px 20px; }
+
+.audio-sheet-intro,
+.audio-sheet-footnote {
+  color: var(--secondary-label);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.audio-sheet-footnote { font-size: 13px; margin: 12px 0 0; }
+.audio-sheet-notice { color: var(--system-red); font-size: 15px; }
+
+.audio-tracks {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--secondary-grouped-background);
+  overflow: hidden;
+}
+
+.audio-track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.audio-track:last-child { border-bottom: none; }
+
+.audio-track-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.audio-track-number {
+  min-width: 24px;
+  color: var(--secondary-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-track.is-current .audio-track-number,
+.audio-track.is-current .audio-track-name { color: var(--accent); font-weight: 600; }
+
+.audio-track-text { display: flex; flex-direction: column; min-width: 0; }
+.audio-track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-track-meta { font-size: 13px; color: var(--secondary-label); }
+
+.audio-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 @media (max-width: 700px) {
   .playback-bar { gap: 10px; padding-left: 12px; padding-right: 12px; }
+  .audio-controls { gap: 8px; }
+  .scrubber-time { min-width: 44px; }
   .pane-row { padding: 0 12px; }
 }

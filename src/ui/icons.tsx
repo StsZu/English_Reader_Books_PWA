@@ -2,7 +2,7 @@
 import {
   ALargeSmall, ArrowRight, AudioLines, Bookmark, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   CircleArrowRight, CircleCheck, CircleHelp, CircleX, Copy, Ellipsis, ExternalLink, GraduationCap, GripVertical,
-  Keyboard, Languages, Library, LibraryBig, List, Mic, Minus, Pause, Play, Plus, RotateCcw, Search, Settings, Share,
+  Headphones, Keyboard, Languages, Library, LibraryBig, List, Mic, Minus, Pause, Play, Plus, RotateCcw, RotateCw, Search, Settings, Share,
   SkipForward, Sparkles, Square, TriangleAlert, Trash2, Type, Volume2, X, type LucideIcon,
 } from 'lucide-preact'
 
@@ -49,6 +49,9 @@ const icons = {
   'waveform': AudioLines,
   forward: SkipForward,
   questionmark: CircleHelp,
+  headphones: Headphones,
+  'gobackward.15': RotateCcw,
+  'goforward.15': RotateCw,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof icons

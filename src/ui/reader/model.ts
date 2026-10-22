@@ -14,6 +14,7 @@ import { OpenAISpeechEngine } from '../../core/speech/openai-speech.ts'
 import { SystemSpeechEngine } from '../../core/speech/system-speech.ts'
 import { currentVoiceEngine, pronounceWord, stopPronunciation } from '../../core/speech/engines.ts'
 import { ReadingController } from '../../core/speech/reading.ts'
+import { AudiobookPlayer } from '../../core/audiobook/player.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import {
@@ -68,6 +69,11 @@ let lookupCounter = 0
 
 export class ReaderModel {
   readonly reading: ReadingController
+  /** The book's own audio files (stage A of specs/002-audio-player). */
+  readonly audiobook: AudiobookPlayer
+  /** Bottom bar: the audiobook player, or reading aloud with the voice from settings. */
+  readonly barMode = signal<'audio' | 'voice'>('audio')
+  readonly audioSheetOpen = signal(false)
   readonly chapter = signal(0)
   readonly topParagraph = signal(0)
   readonly translations = signal<ReadonlyMap<string, TranslationState>>(new Map())
@@ -110,6 +116,12 @@ export class ReaderModel {
     this.sentenceSpeakerAI = options.sentenceSpeaker
       ?? new OpenAISpeechEngine(settings.openAIVoice.value, settings.ttsModel.value, settings.speechRate.value)
     this.reading = new ReadingController(book)
+    this.audiobook = new AudiobookPlayer(book.id, book.title)
+    this.audiobook.onWillPlay = () => {
+      this.reading.stop()
+      this.stopSentenceSpeech()
+      stopPronunciation()
+    }
   }
 
   /** Restores the saved position and selects a sentence opened from the saved list. */
@@ -122,6 +134,7 @@ export class ReaderModel {
       this.topParagraph.value = saved ? Math.min(saved.paragraph, count - 1) : 0
       this.ready.value = true
     })
+    void this.audiobook.load()
     const pending = pendingSentence
     if (pending && pending.bookID === this.book.id) {
       setPendingSentence(null)
@@ -139,6 +152,7 @@ export class ReaderModel {
 
   /** «Слухати»: from the selected sentence, otherwise from the top paragraph. */
   startReading() {
+    this.audiobook.pause()
     this.stopSentenceSpeech()
     const active = this.activeSentence.value
     this.reading.play(active && this.isValid(active) ? active : this.position)
@@ -534,6 +548,7 @@ export class ReaderModel {
     if (current && speechKeyID(current.key) === speechKeyID(key) && current.phase === 'preparing') return
     this.stopSentenceSpeech()
     this.reading.interrupt()
+    this.audiobook.pause()
     stopPronunciation()
     this.configureSentenceSpeaker()
     const token = ++this.speechCounter
@@ -643,6 +658,7 @@ export class ReaderModel {
   pronounce(text: string) {
     this.stopSentenceSpeech()
     this.reading.interrupt()
+    this.audiobook.pause()
     this.pronunciationNotice.value = null
     void pronounceWord(text).then((result) => {
       if (result.fallbackReason) this.pronunciationNotice.value = result.fallbackReason
@@ -657,6 +673,7 @@ export class ReaderModel {
   dispose() {
     this.savePosition()
     this.reading.stop()
+    this.audiobook.dispose()
     this.stopPronunciation()
     this.stopSentenceSpeech()
   }
