@@ -1,4 +1,4 @@
-// Bottom bar of the audiobook player: a full-width scrubber over the current track, ±15 s, play/pause,
+// Bottom bar of the audiobook player: a full-width scrubber over the current track, ±5 s, play/pause,
 // track, speed and the switch back to reading aloud with the voice.
 import { useRef, useState } from 'preact/hooks'
 import type { JSX } from 'preact'
@@ -92,8 +92,8 @@ export function AudioBar({ model }: { model: ReaderModel }) {
       <div class="audio-controls">
         <SkipButton back onClick={() => player.skip(-SKIP_SECONDS)} />
         {playing
-          ? <Button variant="bordered" icon="pause.fill" testID="audioPause" onClick={() => player.pause()}>Пауза</Button>
-          : <Button variant="bordered" icon="play.fill" testID="audioPlay" onClick={() => player.play()}>Слухати</Button>}
+          ? <Button variant="bordered" icon="pause.fill" testID="audioPause" onClick={() => model.toggleListening()}>Пауза</Button>
+          : <Button variant="bordered" icon="play.fill" testID="audioPlay" onClick={() => model.toggleListening()}>Слухати</Button>}
         <SkipButton onClick={() => player.skip(SKIP_SECONDS)} />
         {state === 'loading' && <ProgressSpinner size="small" />}
         <span class="pane-spacer" />
@@ -111,10 +111,7 @@ export function AudioBar({ model }: { model: ReaderModel }) {
               testID: `audioRate-${value}`,
             }))} />
         )}
-        <IconButton icon="waveform" label="Читати голосом" onClick={() => {
-          player.pause()
-          model.barMode.value = 'voice'
-        }} testID="voiceMode" />
+        <IconButton icon="waveform" label="Читати голосом" onClick={() => model.switchBarMode()} testID="voiceMode" />
       </div>
     </footer>
   )

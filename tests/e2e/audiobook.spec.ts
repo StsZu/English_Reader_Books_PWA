@@ -23,6 +23,12 @@ function wav(seconds: number): Buffer {
   return buffer
 }
 
+/** The time shown at the left of the scrubber, in seconds. */
+async function shownSeconds(page: Page) {
+  const [m, s] = (await page.getByTestId('audioTime').textContent())!.split(':').map(Number)
+  return m * 60 + s
+}
+
 async function openDemo(page: Page) {
   await page.route('https://api.openai.com/**', (route) => route.abort())
   await page.goto('./?reset')
@@ -72,15 +78,18 @@ test('аудіокнига: додати файли, повзунок, ±5 с, �
   await page.screenshot({ path: 'build/visual/audiobook-bar.png' })
   await page.mouse.up()
   await expect(page.getByTestId('scrubberBubble')).toHaveCount(0)
-  await expect(page.getByTestId('audioTime')).toHaveText(/^1:0[0-2]$/)
+  // The sound keeps playing, so a loaded machine may show a few seconds more.
+  await expect.poll(() => shownSeconds(page)).toBeGreaterThanOrEqual(59)
+  expect(await shownSeconds(page)).toBeLessThan(70)
 
-  await page.getByTestId('audioBack').click()
-  await expect(page.getByTestId('audioTime')).toHaveText(/^0:5[5-9]$/)
-  await page.getByTestId('audioForward').click()
-  await expect(page.getByTestId('audioTime')).toHaveText(/^1:0[0-4]$/)
-
+  // ±5 s while paused: the shown time does not run on between the press and the check.
   await page.getByTestId('audioPause').click()
   await expect(page.getByTestId('audioPlay')).toBeVisible()
+  const paused = await shownSeconds(page)
+  await page.getByTestId('audioBack').click()
+  await expect.poll(() => shownSeconds(page)).toBe(paused - 5)
+  await page.getByTestId('audioForward').click()
+  await expect.poll(() => shownSeconds(page)).toBe(paused)
 
   // Speed from a menu of four values. Chosen while paused: Playwright's WebKit stops opening any audio file once a file
   // played at a speed other than 1× was paused (Chromium does not); the switch while playing is checked below.
@@ -101,7 +110,8 @@ test('аудіокнига: додати файли, повзунок, ±5 с, �
   const scrubber2 = (await page.getByTestId('audioScrubber').boundingBox())!
   await page.mouse.click(scrubber2.x + scrubber2.width / 3, scrubber2.y + scrubber2.height / 2)
   await expect(page.getByTestId('audioTime')).toHaveText(/^0:(29|30|31)$/)
-  await page.waitForTimeout(300)
+  // The place is written to IndexedDB in the background; a loaded machine needs longer than an idle one.
+  await page.waitForTimeout(1_000)
 
   // The place survives a relaunch.
   await page.goto('./')

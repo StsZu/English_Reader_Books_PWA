@@ -1,17 +1,16 @@
 // Port of ReaderView.swift → PlaybackBar and ChapterNavigation.
 import { Button, IconButton, ProgressSpinner } from '../components/index.ts'
-import { unlockAudio } from '../../core/speech/audio.ts'
 import { AudioBar } from './AudioBar.tsx'
 import type { ReaderModel } from './model.ts'
 
 export function PlaybackBar({ model }: { model: ReaderModel }) {
-  if (model.audiobook.tracks.value.length > 0 && model.barMode.value === 'audio') return <AudioBar model={model} />
+  if (model.audioMode) return <AudioBar model={model} />
   return <VoiceBar model={model} />
 }
 
 function VoiceBar({ model }: { model: ReaderModel }) {
   const reading = model.reading
-  const hasAudio = model.audiobook.tracks.value.length > 0
+  const hasAudio = model.audiobook.hasAudio
   const state = reading.state.value
   const status = {
     idle: `Розділ ${model.chapter.value + 1} з ${model.book.chapters.length} · абзац ${model.topParagraph.value + 1}`,
@@ -22,20 +21,13 @@ function VoiceBar({ model }: { model: ReaderModel }) {
   return (
     <footer class="playback-bar">
       {state === 'idle' && (
-        <Button variant="bordered" icon="play.fill" testID="playButton" onClick={() => {
-          unlockAudio()
-          model.startReading()
-        }}>Слухати</Button>
+        <Button variant="bordered" icon="play.fill" testID="playButton" onClick={() => model.toggleListening()}>Слухати</Button>
       )}
       {(state === 'loading' || state === 'playing') && (
-        <Button variant="bordered" icon="pause.fill" testID="pauseButton" onClick={() => reading.pause()}>Пауза</Button>
+        <Button variant="bordered" icon="pause.fill" testID="pauseButton" onClick={() => model.toggleListening()}>Пауза</Button>
       )}
       {state === 'paused' && (
-        <Button variant="bordered" icon="play.fill" testID="resumeButton" onClick={() => {
-          unlockAudio()
-          model.stopSentenceSpeech()
-          reading.resume()
-        }}>Продовжити</Button>
+        <Button variant="bordered" icon="play.fill" testID="resumeButton" onClick={() => model.toggleListening()}>Продовжити</Button>
       )}
       <Button variant="bordered" icon="stop.fill" disabled={state === 'idle'} testID="stopButton" onClick={() => reading.stop()}>Стоп</Button>
       {state === 'loading' && (
@@ -44,12 +36,8 @@ function VoiceBar({ model }: { model: ReaderModel }) {
       <span class="pane-spacer" />
       <span class="playback-status" data-testid="playbackStatus">{status}</span>
       <IconButton icon="headphones" label={hasAudio ? 'Аудіокнига' : 'Додати аудіокнигу'} testID="audiobookMode" onClick={() => {
-        if (hasAudio) {
-          reading.stop()
-          model.barMode.value = 'audio'
-        } else {
-          model.audioSheetOpen.value = true
-        }
+        if (hasAudio) model.switchBarMode()
+        else model.audioSheetOpen.value = true
       }} />
     </footer>
   )
