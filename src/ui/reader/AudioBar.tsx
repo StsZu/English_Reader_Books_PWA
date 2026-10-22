@@ -4,7 +4,7 @@ import { useRef, useState } from 'preact/hooks'
 import type { JSX } from 'preact'
 import { RATES, SKIP_SECONDS } from '../../core/audiobook/player.ts'
 import { formatNumber, formatTime } from '../../core/util/format.ts'
-import { Button, IconButton, ProgressSpinner } from '../components/index.ts'
+import { Button, IconButton, MenuPopover, ProgressSpinner } from '../components/index.ts'
 import { Icon } from '../icons.tsx'
 import type { ReaderModel } from './model.ts'
 
@@ -68,7 +68,7 @@ function SkipButton({ back = false, onClick }: { back?: boolean; onClick: () => 
   return (
     <button type="button" class="skip-button" onClick={onClick} aria-label={back ? `Назад на ${SKIP_SECONDS} с` : `Уперед на ${SKIP_SECONDS} с`}
       data-testid={back ? 'audioBack' : 'audioForward'}>
-      <Icon name={back ? 'gobackward.15' : 'goforward.15'} size={30} strokeWidth={1.8} />
+      <Icon name={back ? 'gobackward' : 'goforward'} size={30} strokeWidth={1.8} />
       <span class="skip-label">{SKIP_SECONDS}</span>
     </button>
   )
@@ -80,7 +80,12 @@ export function AudioBar({ model }: { model: ReaderModel }) {
   const playing = state === 'playing' || state === 'loading'
   const tracks = player.tracks.value
   const rate = player.rate.value
-  const nextRate = RATES[(RATES.indexOf(rate) + 1) % RATES.length] ?? 1
+  const [rateMenu, setRateMenu] = useState<{ x: number; y: number } | null>(null)
+  // The menu opens above the chip: the bar is at the bottom of the window.
+  const openRates = (event: JSX.TargetedMouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setRateMenu({ x: rect.left + rect.width / 2, y: rect.top - 56 * RATES.length - 20 })
+  }
   return (
     <footer class="playback-bar audio-bar" data-testid="audioBar">
       <Scrubber time={player.time.value} duration={player.duration.value} onSeek={(t) => player.seek(t)} />
@@ -95,8 +100,17 @@ export function AudioBar({ model }: { model: ReaderModel }) {
         <button type="button" class="audio-chip" onClick={() => { model.audioSheetOpen.value = true }} data-testid="audioTrackButton">
           {tracks.length > 1 ? `Доріжка ${player.track.value + 1} з ${tracks.length}` : 'Аудіокнига'}
         </button>
-        <button type="button" class="audio-chip" onClick={() => player.setRate(nextRate)} aria-label={`Швидкість ${rateLabel(rate)}`}
+        <button type="button" class="audio-chip" onClick={openRates} aria-label={`Швидкість ${rateLabel(rate)}`} aria-haspopup="menu"
           data-testid="audioRate">{rateLabel(rate)}</button>
+        {rateMenu && (
+          <MenuPopover x={rateMenu.x} y={rateMenu.y} onClose={() => setRateMenu(null)}
+            actions={RATES.map((value) => ({
+              label: rateLabel(value),
+              icon: value === rate ? 'checkmark' : undefined,
+              onSelect: () => player.setRate(value),
+              testID: `audioRate-${value}`,
+            }))} />
+        )}
         <IconButton icon="waveform" label="Читати голосом" onClick={() => {
           player.pause()
           model.barMode.value = 'voice'

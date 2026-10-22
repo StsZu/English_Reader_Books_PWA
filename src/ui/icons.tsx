@@ -50,8 +50,8 @@ const icons = {
   forward: SkipForward,
   questionmark: CircleHelp,
   headphones: Headphones,
-  'gobackward.15': RotateCcw,
-  'goforward.15': RotateCw,
+  gobackward: RotateCcw,
+  goforward: RotateCw,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof icons

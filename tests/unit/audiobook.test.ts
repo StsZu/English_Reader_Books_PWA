@@ -1,7 +1,7 @@
 // Audiobook store and player (specs/002-audio-player, stage A) with a fake <audio> element.
 import { File as NodeFile } from 'node:buffer'
-import { describe, expect, it } from 'vitest'
-import { AudiobookPlayer, type MediaElement } from '../../src/core/audiobook/player.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { AudiobookPlayer, LONG_PAUSE_MS, type MediaElement } from '../../src/core/audiobook/player.ts'
 import {
   addTracks, closeAudioDB, compareNames, deleteAudio, isAudioFile, listTracks, loadAudioPosition, trackFile,
 } from '../../src/core/audiobook/store.ts'
@@ -118,7 +118,7 @@ describe('AudiobookPlayer', () => {
     player.pause()
     expect(player.state.value).toBe('paused')
     await flush()
-    expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 42 })
+    expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 42, rate: 1 })
 
     const again = new AudiobookPlayer(bookID, 'Book', () => new FakeElement())
     await again.load()
@@ -142,8 +142,8 @@ describe('AudiobookPlayer', () => {
 
   it('applies the speed with pitch kept and saves the measured duration', async () => {
     const { bookID, element, player } = await playerWith(['01.mp3'])
-    player.setRate(1.5)
-    expect([element.playbackRate, element.preservesPitch]).toEqual([1.5, true])
+    player.setRate(1.15)
+    expect([element.playbackRate, element.preservesPitch]).toEqual([1.15, true])
     expect((await listTracks(bookID))[0].duration).toBe(100)
   })
 
@@ -155,7 +155,81 @@ describe('AudiobookPlayer', () => {
     element.pause()
     await flush()
     expect(player.state.value).toBe('paused')
-    expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 12 })
+    expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 12, rate: 1 })
+  })
+
+  it('after a pause starts 1 s earlier, 3 s after a long pause or reopening; a seek starts exactly there', async () => {
+    const { bookID, element, player } = await playerWith(['01.mp3'])
+    player.play()
+    await flush()
+    element.advance(30)
+    // The element is ahead of the last timeupdate: the pause keeps the element's own time.
+    element.currentTime = 30.4
+    player.pause()
+    expect(player.time.value).toBe(30.4)
+    await flush()
+    expect((await loadAudioPosition(bookID))?.time).toBe(30.4)
+    player.play()
+    expect(element.currentTime).toBeCloseTo(29.4)
+    expect(player.time.value).toBeCloseTo(29.4)
+    await flush()
+
+    // A second play while playing does not go back again.
+    player.play()
+    expect(element.currentTime).toBeCloseTo(29.4)
+
+    player.pause()
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + LONG_PAUSE_MS)
+    player.play()
+    clock.mockRestore()
+    expect(element.currentTime).toBeCloseTo(26.4)
+    await flush()
+
+    player.pause()
+    player.seek(50)
+    player.play()
+    expect(element.currentTime).toBe(50)
+    await flush()
+
+    element.pause()
+    await flush()
+    player.skip(-5)
+    player.play()
+    expect(element.currentTime).toBe(45)
+    player.pause()
+    await flush()
+
+    const element2 = new FakeElement()
+    const again = new AudiobookPlayer(bookID, 'Book', () => element2)
+    await again.load()
+    await flush()
+    expect(again.time.value).toBe(45)
+    again.play()
+    expect(element2.currentTime).toBe(42)
+  })
+
+  it('a rewind never goes before the start of the track', async () => {
+    const { element, player } = await playerWith(['01.mp3'])
+    player.play()
+    await flush()
+    element.advance(0.5)
+    player.pause()
+    player.play()
+    expect(element.currentTime).toBe(0)
+  })
+
+  it('remembers the speed of the book', async () => {
+    const { bookID, player } = await playerWith(['01.mp3'])
+    player.setRate(0.9)
+    await flush()
+    expect((await loadAudioPosition(bookID))?.rate).toBe(0.9)
+    const element = new FakeElement()
+    const again = new AudiobookPlayer(bookID, 'Book', () => element)
+    await again.load()
+    await flush()
+    expect(again.rate.value).toBe(0.9)
+    expect(element.playbackRate).toBe(0.9)
   })
 
   it('stops other sounds before playing', async () => {

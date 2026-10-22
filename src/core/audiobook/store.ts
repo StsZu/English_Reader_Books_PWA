@@ -15,6 +15,8 @@ export interface AudioTrack {
 export interface AudioPosition {
   track: number
   time: number
+  /** Listening speed of the book; absent in places saved before it was remembered. */
+  rate?: number
 }
 
 const AUDIO_DB = `${DB_NAME}-audio`

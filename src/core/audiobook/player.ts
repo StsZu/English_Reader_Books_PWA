@@ -26,8 +26,13 @@ export interface MediaElement {
   removeEventListener(type: string, listener: () => void): void
 }
 
-export const SKIP_SECONDS = 15
-export const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
+export const SKIP_SECONDS = 5
+export const RATES = [0.75, 0.9, 1, 1.15]
+/** «Слухати» after a pause starts a little earlier: the sound cut off at the pause was still on its way to the speaker. */
+export const RESUME_REWIND_SECONDS = 1
+/** After a long pause (or reopening the book) it goes back further, to pick up the thread. */
+export const LONG_PAUSE_MS = 5 * 60_000
+export const LONG_PAUSE_REWIND_SECONDS = 3
 /** How often the listening place is saved while playing. */
 export const SAVE_INTERVAL_MS = 5000
 
@@ -58,6 +63,8 @@ export class AudiobookPlayer {
   private pendingSeek: number | null = null
   private loadToken = 0
   private lastSave = 0
+  /** When playback was paused (0: before this session); null after an explicit seek, which starts exactly there. */
+  private pausedAt: number | null = null
   private disposed = false
 
   constructor(
@@ -84,7 +91,9 @@ export class AudiobookPlayer {
       this.track.value = track
       this.time.value = position && position.track === track ? Math.max(0, position.time) : 0
       this.duration.value = tracks[track]?.duration ?? 0
+      this.rate.value = position?.rate !== undefined && RATES.includes(position.rate) ? position.rate : 1
     })
+    this.pausedAt = position ? 0 : null
     if (tracks.length) await this.prepare(track, this.time.value)
   }
 
@@ -142,7 +151,14 @@ export class AudiobookPlayer {
     this.onWillPlay()
     this.error.value = null
     const audio = this.audio
+    const rewind = this.resumeRewind()
     if (this.loaded === this.track.value) {
+      if (rewind > 0) {
+        const target = Math.max(0, (this.pendingSeek ?? audio.currentTime) - rewind)
+        if (this.pendingSeek !== null) this.pendingSeek = target
+        else audio.currentTime = target
+        this.time.value = target
+      }
       this.state.value = 'loading'
       this.start()
       return
@@ -151,10 +167,22 @@ export class AudiobookPlayer {
     audio.src = SILENCE
     audio.play().catch(() => {})
     this.state.value = 'loading'
-    void this.prepare(this.track.value, this.time.value).then((ready) => {
+    void this.prepare(this.track.value, Math.max(0, this.time.value - rewind)).then((ready) => {
       if (ready) this.start()
       else this.state.value = 'paused'
     })
+  }
+
+  private resumeRewind(): number {
+    const pausedAt = this.pausedAt
+    this.pausedAt = null
+    if (pausedAt === null) return 0
+    return Date.now() - pausedAt >= LONG_PAUSE_MS ? LONG_PAUSE_REWIND_SECONDS : RESUME_REWIND_SECONDS
+  }
+
+  /** The element's own time: `time` is refreshed only a few times a second. */
+  private captureTime() {
+    if (this.element && this.ownsElement && this.pendingSeek === null) this.time.value = this.element.currentTime
   }
 
   private start() {
@@ -168,8 +196,10 @@ export class AudiobookPlayer {
 
   pause() {
     if (!this.element || this.state.value === 'idle' || this.state.value === 'paused') return
+    this.captureTime()
     this.element.pause()
     this.state.value = 'paused'
+    this.pausedAt = Date.now()
     setMediaPlaybackState('paused')
     void this.savePosition()
   }
@@ -184,6 +214,7 @@ export class AudiobookPlayer {
     const duration = this.duration.value || this.element?.duration || 0
     const target = Math.max(0, duration > 0 ? Math.min(time, Math.max(0, duration - 0.25)) : time)
     this.time.value = target
+    this.pausedAt = null
     if (this.element && this.loaded === this.track.value && this.pendingSeek === null) this.element.currentTime = target
     else this.pendingSeek = target
     void this.savePosition()
@@ -199,6 +230,7 @@ export class AudiobookPlayer {
     if (index < 0 || index >= this.tracks.value.length) return
     const playing = this.isPlaying
     this.element?.pause()
+    this.pausedAt = null
     if (playing) this.state.value = 'loading'
     const ready = await this.prepare(index, time)
     void this.savePosition()
@@ -210,6 +242,7 @@ export class AudiobookPlayer {
     this.rate.value = rate
     if (this.element) this.applyRate()
     this.updatePosition()
+    void this.savePosition()
   }
 
   // MARK: Editing the track list
@@ -311,7 +344,9 @@ export class AudiobookPlayer {
   /** Paused by the system (call, Siri, headphones out) or by the lock screen. */
   private readonly onPause = () => {
     if (this.ownsElement && this.state.value === 'playing') {
+      this.captureTime()
       this.state.value = 'paused'
+      this.pausedAt = Date.now()
       setMediaPlaybackState('paused')
       void this.savePosition()
     }
@@ -358,7 +393,7 @@ export class AudiobookPlayer {
   async savePosition() {
     if (!this.hasAudio) return
     this.lastSave = Date.now()
-    await saveAudioPosition(this.bookID, { track: this.track.value, time: this.time.value })
+    await saveAudioPosition(this.bookID, { track: this.track.value, time: this.time.value, rate: this.rate.value })
   }
 
   private unload() {

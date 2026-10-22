@@ -1,4 +1,4 @@
-// Audiobook player (specs/002-audio-player, stage A): adding files, scrubber, ±15 s, speed, tracks, place, removal.
+// Audiobook player (specs/002-audio-player, stage A): adding files, scrubber, ±5 s, speed, tracks, place, removal.
 import { expect, test, type Page } from '@playwright/test'
 
 const demo = 'The Adventures of Sherlock Holmes (excerpt)'
@@ -40,7 +40,7 @@ async function addFiles(page: Page) {
   await expect(page.getByTestId('audioTrack-1')).toBeVisible()
 }
 
-test('аудіокнига: додати файли, повзунок, ±15 с, швидкість, доріжки, місце після перезапуску', async ({ page }) => {
+test('аудіокнига: додати файли, повзунок, ±5 с, швидкість, доріжки, місце після перезапуску', async ({ page }) => {
   await openDemo(page)
   await addFiles(page)
   await expect(page.getByTestId('audioTrack-0')).toContainText('01 First.wav')
@@ -74,15 +74,22 @@ test('аудіокнига: додати файли, повзунок, ±15 с, 
   await expect(page.getByTestId('audioTime')).toHaveText(/^1:0[0-2]$/)
 
   await page.getByTestId('audioBack').click()
-  await expect(page.getByTestId('audioTime')).toHaveText(/^0:4[5-8]$/)
+  await expect(page.getByTestId('audioTime')).toHaveText(/^0:5[5-9]$/)
   await page.getByTestId('audioForward').click()
-  await expect(page.getByTestId('audioTime')).toHaveText(/^1:0[0-3]$/)
-
-  await page.getByTestId('audioRate').click()
-  await expect(page.getByTestId('audioRate')).toHaveText('1,25×')
+  await expect(page.getByTestId('audioTime')).toHaveText(/^1:0[0-4]$/)
 
   await page.getByTestId('audioPause').click()
   await expect(page.getByTestId('audioPlay')).toBeVisible()
+
+  // Speed from a menu of four values. Chosen while paused: Playwright's WebKit stops opening any audio file once a file
+  // played at a speed other than 1× was paused (Chromium does not); the switch while playing is checked below.
+  await page.getByTestId('audioRate').click()
+  await expect(page.getByRole('menuitem')).toHaveText(['0,75×', '0,9×', '1,0×', '1,15×'])
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: 'build/visual/audiobook-rate.png' })
+  await page.getByTestId('audioRate-0.9').click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(page.getByTestId('audioRate')).toHaveText('0,9×')
 
   // Second track from the sheet.
   await page.getByTestId('audioTrackButton').click()
@@ -100,6 +107,7 @@ test('аудіокнига: додати файли, повзунок, ±15 с, 
   await page.getByTestId(`book-${demo}`).click()
   await expect(page.getByTestId('audioTrackButton')).toHaveText('Доріжка 2 з 2')
   await expect(page.getByTestId('audioTime')).toHaveText(/^0:(29|30|31)$/)
+  await expect(page.getByTestId('audioRate')).toHaveText('0,9×')
 })
 
 test('аудіокнига: перемикання на голос, видалення доріжки й усього аудіо', async ({ page }) => {
@@ -123,4 +131,22 @@ test('аудіокнига: перемикання на голос, видале
   await page.getByTestId('audioSheetDone').click()
   await expect(page.getByTestId('playButton')).toBeVisible()
   await expect(page.getByTestId('audioBar')).toHaveCount(0)
+})
+
+test('аудіокнига: перехід на іншу доріжку під час відтворення на швидкості 0,9×', async ({ page }) => {
+  await openDemo(page)
+  await addFiles(page)
+  await page.getByTestId('audioSheetDone').click()
+  await page.getByTestId('audioPlay').click()
+  await expect(page.getByTestId('audioPause')).toBeVisible()
+  await page.getByTestId('audioRate').click()
+  await page.getByTestId('audioRate-0.9').click()
+  await expect(page.getByTestId('audioTime')).not.toHaveText('0:00', { timeout: 5_000 })
+  await page.getByTestId('audioTrackButton').click()
+  await page.getByTestId('selectTrack-1').click()
+  await page.getByTestId('audioSheetDone').click()
+  await expect(page.getByTestId('audioTrackButton')).toHaveText('Доріжка 2 з 2')
+  await expect(page.getByTestId('audioDuration')).toHaveText('1:30')
+  await expect(page.getByTestId('audioPause')).toBeVisible()
+  await expect(page.getByTestId('audioTime')).not.toHaveText('0:00', { timeout: 5_000 })
 })
