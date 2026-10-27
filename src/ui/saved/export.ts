@@ -1,23 +1,23 @@
 // «Поділитися» (Z5): the system share sheet with a file, or a download where files cannot be shared.
 import { quotesText, wordsCSV, type SavedQuote, type SavedWord } from '../../core/saved/saved.ts'
 
-export interface ExportFile {
+export interface ExportFile<Contents extends string | Blob = string | Blob> {
   name: string
   type: string
-  contents: string
+  contents: Contents
 }
 
-export function wordsFile(list: SavedWord[]): ExportFile {
+export function wordsFile(list: SavedWord[]): ExportFile<string> {
   return { name: 'Слова.csv', type: 'text/csv', contents: wordsCSV(list) }
 }
 
-export function quotesFile(list: SavedQuote[]): ExportFile {
+export function quotesFile(list: SavedQuote[]): ExportFile<string> {
   return { name: 'Цитати.txt', type: 'text/plain', contents: quotesText(list) }
 }
 
 /** Returns how the file left the app: shared, downloaded, or cancelled by the user. */
 export async function shareFile(file: ExportFile): Promise<'shared' | 'downloaded' | 'cancelled'> {
-  const blob = new Blob([file.contents], { type: `${file.type};charset=utf-8` })
+  const blob = file.contents instanceof Blob ? file.contents : new Blob([file.contents], { type: `${file.type};charset=utf-8` })
   const shared = new File([blob], file.name, { type: file.type })
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [shared] })) {
     try {

@@ -30,6 +30,11 @@ export function formatDayMonth(date: Date): string {
   return `${dd}.${mm}`
 }
 
+/** "дд.мм.рррр". */
+export function formatDate(date: Date): string {
+  return `${formatDayMonth(date)}.${date.getFullYear()}`
+}
+
 /** "0,7×". */
 export function scaleLabel(value: number, digits = 1): string {
   return `${formatNumber(value, digits, digits)}×`

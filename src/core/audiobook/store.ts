@@ -58,6 +58,11 @@ export async function listTracks(bookID: string): Promise<AudioTrack[]> {
   return ((await (await db()).get('tracks', bookID)) as AudioTrack[] | undefined) ?? []
 }
 
+/** Books that have audio on this device. */
+export async function audioBookIDs(): Promise<string[]> {
+  return (await (await db()).getAllKeys('tracks')).map(String)
+}
+
 export async function setTracks(bookID: string, tracks: AudioTrack[]): Promise<void> {
   await (await db()).put('tracks', tracks, bookID)
 }
