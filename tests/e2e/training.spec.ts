@@ -1,5 +1,6 @@
 // Ports of the training UI tests in EnglishReaderUITests/MainScenarioUITests.swift (stages 2.4–2.5).
 import { expect, test, type Page } from '@playwright/test'
+import { fixtureSavedWords } from '../../src/core/language.ts'
 
 // allTextContents does not wait, so a fixture removed between two checks cannot stall a poll.
 const fixture = async (page: Page) => ((await page.getByTestId('trainingFixture').allTextContents())[0] ?? '').split('|')
@@ -30,8 +31,8 @@ async function solveReorderByTaps(page: Page, answer: string) {
 test('повна сесія з помилками, клавіатурою та підсумком', async ({ page }) => {
   await openTraining(page, 'testRecording&voice=system')
   await page.getByTestId('trainingContinue').click()
-  await expect(page.getByTestId('introWord-woman')).toBeVisible()
-  await page.getByTestId('introWord-woman').click()
+  await expect(page.getByTestId(`introWord-${fixtureSavedWords[0][0]}`)).toBeVisible()
+  await page.getByTestId(`introWord-${fixtureSavedWords[0][0]}`).click()
   await page.screenshot({ path: 'build/visual/training-intro.png' })
   await page.getByTestId('trainingStart').click()
 

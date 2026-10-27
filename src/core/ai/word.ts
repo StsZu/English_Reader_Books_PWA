@@ -1,6 +1,7 @@
 // Port of EnglishReader/Services/WordLookupService.swift: the context-aware word card and
 // «Пояснити детальніше» (DT6), with the same JSON schema and cache keys.
 import { AIError, type WordCard } from '../../contracts.ts'
+import { fixtureCard as languageFixtureCard } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
 import { cache, getValue, setValue } from '../storage/db.ts'
 import { sha256Hex } from '../util/hash.ts'
@@ -68,9 +69,8 @@ export function encodeWordCard(card: WordCard): WordCardJSON {
 /** UI-test fixture card (`?testWordCard`, as in EnglishReaderApp.swift). */
 export function fixtureCard(word: string): WordCard {
   return {
-    headword: word, lemma: word.toLowerCase(), ipa: 'ˈwʊmən', partOfSpeech: 'іменник',
-    contextTranslation: 'жінка', otherTranslations: ['дружина', 'служниця'], note: '',
-    level: 'A1', forms: 'woman — women', irregular: true,
+    headword: word, lemma: word.toLowerCase(), note: '', ...languageFixtureCard,
+    otherTranslations: [...languageFixtureCard.otherTranslations],
   }
 }
 

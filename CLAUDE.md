@@ -26,7 +26,7 @@ PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_
 - Після кожного завдання оновлювати його стан і результат перевірки в `tasks.md`.
 - Нова вимога або зміна поведінки щодо еталона — спершу запис у `spec.md` (або `idea.md` функції), потім код.
 - Тексти інтерфейсу — дослівно зі Swift-коду або записане відхилення; промпти й тексти помилок звіряються з еталоном (`scripts/extract-swift-strings.ts`).
-- Спільний код із `../Polish_Reader_Books_PWA` (мовна частина там — `src/core/language.ts`). Специфікації 002/003 і `backlog.md` стосуються обох застосунків; Polish Reader змінювати лише за окремим запитом.
+- Спільний код із `../Polish_Reader_Books_PWA`: усе мовне — лише в `src/core/language.ts`, `tests/fixtures/language.ts`, `tests/unit/language.test.ts`; решта файлів має збігатися байт у байт (`npm run sibling-diff`). Специфікації 002/003/005 і `backlog.md` стосуються обох застосунків; Polish Reader змінювати лише за окремим запитом.
 - Спілкування українською, стисло, без емодзі.
 
 ## Команди
@@ -34,6 +34,7 @@ PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_
 - `npm run dev` — розробка (тестовий режим увімкнено: `?reset`, `?testTranslation`, `?testSpeech`, `?testWordCard`, `?testSavedWords`, `?testRecording`, `?voice=system|openAI`, `?import=<шлях>`, `?gallery`).
 - `npm test` — модульні тести (без мережі); `npm run test:e2e` — WebKit iPad + офлайн у Chromium; `npm run golden` — розбиття проти нативного імпортера; `npm run check` — production-збірка, секрети, CSP, розмір.
 - `npm run lint`, `npm run typecheck`, `npm run size` — окремі перевірки зі складу стандартів конституції.
+- `npm run sibling-diff` — розбіжності з Polish Reader поза дозволеним списком у `scripts/sibling-diff.mjs`; після перенесення виправлення має бути «OK».
 - Один модульний тест: `npx vitest run tests/unit/segmenter.test.ts -t "<частина назви>"`.
 - Один e2e: `npx playwright test tests/e2e/reader.spec.ts --project=webkit-ipad -g "<частина назви>"`; офлайн — `--project=chromium-offline`.
 - `npm run test:live` — платні живі тести OpenAI, лише з дозволом і ключем у змінній середовища.

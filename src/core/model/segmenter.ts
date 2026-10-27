@@ -1,24 +1,24 @@
 // Port of EnglishReader/Model/TextSegmenter.swift. NLTokenizer is replaced by Intl.Segmenter (ICU);
-// ICU breaks after abbreviations such as "Mr." that NLTokenizer keeps, so those are glued back.
+// ICU breaks after abbreviations that continue the sentence (src/core/language.ts), so those are glued back.
 import type { Book, BookFormat, Paragraph, RawBook } from './book.ts'
+import {
+  abbreviations as abbreviationList, dialogueDashStartsSentence, numberAbbreviations as numberAbbreviationList, sourceLanguage,
+} from '../language.ts'
 
 export interface WordRange {
   start: number
   end: number
 }
 
-const sentenceSegmenter = new Intl.Segmenter('en', { granularity: 'sentence' })
-const wordSegmenter = new Intl.Segmenter('en', { granularity: 'word' })
+const sentenceSegmenter = new Intl.Segmenter(sourceLanguage, { granularity: 'sentence' })
+const wordSegmenter = new Intl.Segmenter(sourceLanguage, { granularity: 'word' })
 
-const abbreviations = new Set([
-  'mr', 'mrs', 'ms', 'dr', 'st', 'jr', 'sr', 'prof', 'rev', 'gen', 'col', 'capt', 'lt', 'vs', 'etc',
-  'e.g', 'i.e', 'mt', 'messrs', 'mme', 'mlle', 'sgt', 'cpl', 'gov', 'hon', 'esq',
-])
+const abbreviations = new Set(abbreviationList)
 
 const hasLetter = (s: string): boolean => /\p{L}/u.test(s)
 
 /** Abbreviations glued only before a number ("No. 7"), since "No." is also a whole reply. */
-const numberAbbreviations = new Set(['no', 'nos', 'vol', 'p', 'pp', 'ch', 'fig'])
+const numberAbbreviations = new Set(numberAbbreviationList)
 
 /**
  * Whether the next sentence continues this one: it ends with an abbreviation, a single-letter
@@ -37,13 +37,20 @@ export function gluesToNext(sentence: string, next: string): boolean {
 /**
  * Splits a paragraph into trimmed sentences. Very long sentences stay whole:
  * translation and speech both work per sentence, so only splitting at real
- * boundaries keeps the Ukrainian line aligned with its English source.
+ * boundaries keeps the Ukrainian line aligned with its source.
  */
 export function sentences(text: string): string[] {
   const cleaned = normalizeWhitespace(text)
   if (!cleaned) return []
   const result: string[] = []
-  for (const { segment } of sentenceSegmenter.segment(cleaned)) {
+  // ICU does not break before a dialogue dash («…jesteście? — Jestem Polak.»); where the dash starts a reply
+  // (language.ts), a new sentence starts there when the dash is followed by a capital letter.
+  // A lower-case attribution («— spytał.») stays glued below.
+  const segments = [...sentenceSegmenter.segment(cleaned)].map(({ segment }) => segment)
+  const pieces = dialogueDashStartsSentence
+    ? segments.flatMap((segment) => segment.split(/(?<=[.?!…])\s+(?=[—–]\s*\p{Lu})/u))
+    : segments
+  for (const segment of pieces) {
     const sentence = segment.trim()
     if (!sentence) continue
     const glue = result.length > 0 && gluesToNext(result[result.length - 1], sentence)

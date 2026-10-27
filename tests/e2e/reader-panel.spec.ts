@@ -1,7 +1,8 @@
 // Port of testReaderPanelSettingsApplyAndPersist (MainScenarioUITests.swift), stage 2.0: S1–S5, B1–B7, D1–D8.
 import { expect, test, type Page } from '@playwright/test'
+import { demoBook } from '../fixtures/language.ts'
 
-const demoTitle = 'The Adventures of Sherlock Holmes (excerpt)'
+const demoTitle = demoBook.title
 
 test.beforeEach(async ({ page }) => {
   await page.route('https://api.openai.com/**', (route) => route.abort())
@@ -33,7 +34,7 @@ async function expand(page: Page, section: string) {
 
 test('панель читання змінює оформлення книжки й зберігає налаштування', async ({ page }) => {
   await openDemo(page, '?reset&testTranslation&testSpeech&voice=openAI')
-  const paragraph = page.locator('[data-p="2"]')
+  const paragraph = page.locator(`[data-p="${demoBook.paragraph}"]`)
   const status = page.getByTestId('playbackStatus')
   const positionBefore = (await status.count()) ? await status.textContent() : null
   const boxBefore = await paragraph.boundingBox()
@@ -94,7 +95,7 @@ test('панель читання змінює оформлення книжки
   // Contents tab from the contents button; swipe right closes.
   await page.getByTestId('contentsButton').click()
   await expect(page.getByTestId('panelTabContents')).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('listitem', { name: 'The Red-Headed League' })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: demoBook.secondChapter })).toBeVisible()
   await page.screenshot({ path: 'build/visual/panel-contents.png' })
   const panel = page.getByTestId('readerPanel')
   const box = (await panel.boundingBox())!
@@ -118,7 +119,7 @@ test('панель читання змінює оформлення книжки
 test('вкладка «Зміст» переходить до розділу', async ({ page }) => {
   await openDemo(page, '?reset')
   await page.getByTestId('contentsButton').click()
-  await page.getByRole('listitem', { name: 'The Red-Headed League' }).click()
+  await page.getByRole('listitem', { name: demoBook.secondChapter }).click()
   await expect(page.getByTestId('readerPanel')).toBeHidden()
-  await expect(page.locator('[data-p="1"]')).toContainText('I had called upon my friend')
+  await expect(page.locator('[data-p="1"]')).toContainText(demoBook.secondChapterText)
 })

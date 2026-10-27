@@ -1,6 +1,7 @@
 // Port of EnglishReader/Views/SettingsView.swift («ШІ-сервіси»): OpenAI key, connection check, models,
 // plus the storage state that the web version needs (V-03, FR-32).
 import { useEffect, useState } from 'preact/hooks'
+import { translationCheckSentence } from '../../core/language.ts'
 import { deleteKey, hasStoredKey, saveKey } from '../../core/storage/key.ts'
 import { isPersisted, requestPersistence } from '../../core/storage/db.ts'
 import { settings, settingDefaults } from '../../core/storage/settings.ts'
@@ -25,7 +26,7 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
     setChecking(true)
     try {
       const result = await new OpenAITranslationProvider(settings.textModel.value)
-        .translate(['The book is on the table.'], null)
+        .translate([translationCheckSentence], null)
       setCheckResult(`Працює: «${result[0] ?? ''}»`)
     } catch (error) {
       setCheckResult(errorMessage(error))

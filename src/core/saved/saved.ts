@@ -1,6 +1,7 @@
 // Port of EnglishReader/Services/SavedStore.swift: saved words (one per lemma) and quotes,
 // stored as {words, quotes} in meta `saved`. Never sent to any service.
 import { signal } from '@preact/signals'
+import { fixtureSavedWords, fixtureSentence } from '../language.ts'
 import type { WordCard } from '../../contracts.ts'
 import type { ParagraphRef, SentenceRef } from '../model/book.ts'
 import { getValue, setValue } from '../storage/db.ts'
@@ -213,14 +214,13 @@ export function quotesText(list: SavedQuote[]): string {
   return list.map((q) => `${q.text}\n${q.translation}\n— ${q.place.bookTitle}`).join('\n\n') + '\n'
 }
 
-/** UI-test fixture (`?testSavedWords`): four words including the phrase «look up». */
+/** UI-test fixture (`?testSavedWords`): four words including a phrase (language.ts). */
 export async function seedForTests(): Promise<void> {
   const place: SavedPlace = { bookID: uuid(), bookTitle: 'Тест', chapter: 0, paragraph: 0, sentence: 0 }
-  const entries: [string, string, string][] = [['woman', 'жінка', 'іменник'], ['river', 'річка', 'іменник'],
-    ['bright', 'яскравий', 'прикметник'], ['look up', 'шукати', 'дієслово']]
+  const entries = fixtureSavedWords
   words.value = entries.map(([word, translation, part]) => ({
     id: uuid(), headword: word, lemma: word, ipa: '', partOfSpeech: part, level: '', forms: '', contextTranslation: translation,
-    otherTranslations: [], contexts: [{ sentence: `A ${word} here.`, translation, place, date: nowISO() }], updatedAt: nowISO(),
+    otherTranslations: [], contexts: [{ sentence: fixtureSentence(word), translation, place, date: nowISO() }], updatedAt: nowISO(),
     trainingLevel: 0, nextReview: null, lastTrained: null, lastResultUnknown: false,
   }))
   await persist()

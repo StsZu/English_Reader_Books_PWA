@@ -1,8 +1,9 @@
 // Audiobook player (specs/002-audio-player, stage A): adding files, scrubber, ±5 s, speed, tracks, place, removal;
 // keyboard shortcuts (specs/003-resume-and-shortcuts).
 import { expect, test, type Page } from '@playwright/test'
+import { demoBook } from '../fixtures/language.ts'
 
-const demo = 'The Adventures of Sherlock Holmes (excerpt)'
+const demo = demoBook.title
 
 /** Silent 8 kHz mono WAV generated in the test (no third-party recordings). */
 function wav(seconds: number): Buffer {

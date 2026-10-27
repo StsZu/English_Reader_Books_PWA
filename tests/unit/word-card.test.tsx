@@ -4,15 +4,12 @@ import { act } from 'preact/test-utils'
 import { resetAllSettings, settings } from '../../src/core/storage/settings.ts'
 import { WordCard, type WordCardProps } from '../../src/ui/word/WordCard.tsx'
 import type { WordLookup } from '../../src/ui/reader/types.ts'
-
-const card = {
-  headword: 'woman', lemma: 'woman', ipa: 'ˈwʊmən', partOfSpeech: 'іменник', contextTranslation: 'жінка',
-  otherTranslations: ['дружина', 'служниця'], note: '', level: 'A1', forms: 'woman — women', irregular: true,
-}
+import { defaultEnabledDictionaries } from '../../src/core/language.ts'
+import { sampleCard as card, sampleSentence, sampleWord } from '../fixtures/language.ts'
 
 function lookup(overrides: Partial<WordLookup> = {}): WordLookup {
   return {
-    id: 1, word: 'woman', sentence: 'To Sherlock Holmes she is always the woman.',
+    id: 1, word: sampleWord, sentence: sampleSentence,
     ref: { paragraph: { chapter: 0, paragraph: 1 }, sentence: 0 }, card, error: null, needsSettings: false,
     explanation: null, explaining: false, explanationError: null, explanationNeedsSettings: false, ...overrides,
   }
@@ -45,13 +42,13 @@ afterEach(() => {
 describe('WordCard', () => {
   it('shows level, forms, context translation and default dictionaries', () => {
     mount()
-    expect(byID('wordHeadword')?.textContent).toBe('woman')
-    expect(byID('wordLevel')?.getAttribute('aria-label')).toBe('Рівень A1')
-    expect(byID('wordForms')?.textContent).toBe('woman — women')
-    expect(byID('wordIrregular')).not.toBeNull()
-    expect(byID('wordContextTranslation')?.textContent).toBe('жінка')
+    expect(byID('wordHeadword')?.textContent).toBe(card.headword)
+    expect(byID('wordLevel')?.getAttribute('aria-label')).toBe(`Рівень ${card.level}`)
+    expect(byID('wordForms')?.textContent).toBe(card.forms)
+    expect(byID('wordIrregular') !== null).toBe(card.irregular)
+    expect(byID('wordContextTranslation')?.textContent).toBe(card.contextTranslation)
     const ids = [...document.querySelectorAll('[data-testid^="dictionary-"]')].map((e) => e.getAttribute('data-testid'))
-    expect(ids).toEqual(['dictionary-cambridge', 'dictionary-reverso', 'dictionary-google', 'dictionary-deepl', 'dictionary-glosbe'])
+    expect(ids).toEqual(defaultEnabledDictionaries.map((id) => `dictionary-${id}`))
   })
 
   it('hides level and forms by settings and follows dictionary order', () => {
@@ -72,7 +69,7 @@ describe('WordCard', () => {
     byID('saveWordButton')!.click()
     expect(props.onToggleSave).toHaveBeenCalledOnce()
     byID('pronounceButton')!.click()
-    expect(props.onPronounce).toHaveBeenCalledWith('woman')
+    expect(props.onPronounce).toHaveBeenCalledWith(sampleWord)
     byID('explainButton')!.click()
     expect(props.onExplain).toHaveBeenCalledWith(false)
     mount({ saved: true, lookup: lookup({ explanation: 'Пояснення.' }) })

@@ -1,14 +1,14 @@
 // Port of OpenAISpeechEngine (EnglishReader/Services/SpeechEngines.swift): MP3 per sentence,
 // cached in Cache Storage under the same SHA-256 key the Swift app used for its file names.
 import { abortError, AIError, ReplayMissingError, type ReplayableSpeech } from '../../contracts.ts'
+import { speechInstructions } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
 import { sha256Hex } from '../util/hash.ts'
 import { pauseAudio, playURL, resumeAudio, stopAudio } from './audio.ts'
 import { speech } from '../ai/openai.ts'
 
 /** Same text as OpenAISpeechEngine.instructions; part of the cache key. */
-export const SPEECH_INSTRUCTIONS =
-  'Read this sentence from a book aloud in clear, natural English with a neutral British accent, at a calm pace suitable for a language learner.'
+export const SPEECH_INSTRUCTIONS = speechInstructions
 
 export type Synthesizer = (model: string, voice: string, text: string) => Promise<ArrayBuffer>
 

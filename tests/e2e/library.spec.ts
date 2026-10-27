@@ -1,11 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 import { brokenEPUB, drmEPUB, garbageEPUB, pdfFile, plainText, storedEPUB, type FilePayload } from '../fixtures/e2e/books.ts'
+import { demoBook } from '../fixtures/language.ts'
 
 test.beforeEach(async ({ page }) => {
   await page.route('https://api.openai.com/**', (route) => route.abort())
 })
 
-const demoTitle = 'The Adventures of Sherlock Holmes (excerpt)'
+const demoTitle = demoBook.title
 
 async function importFile(page: Page, payload: FilePayload) {
   await page.getByTestId('importInput').setInputFiles(payload)
@@ -26,7 +27,7 @@ test('демо-книжка є після першого запуску й ли�
   await expect(page.getByRole('heading', { name: 'Мої книжки' })).toBeVisible()
   const demo = page.getByTestId(`book-${demoTitle}`)
   await expect(demo).toBeVisible()
-  await expect(demo).toContainText('Arthur Conan Doyle')
+  await expect(demo).toContainText(demoBook.author)
   await expect(demo).toContainText('MD')
   await expect(demo).toContainText('Розділів: 2')
   await page.goto('./')

@@ -1,5 +1,6 @@
 // Design-system showcase (dev/test only, `?gallery`): every component in the current reader theme.
 import { useEffect, useState } from 'preact/hooks'
+import { sourceLanguageName } from '../core/language.ts'
 import type { ReaderThemeName } from '../core/storage/settings.ts'
 import { Icon } from './icons.tsx'
 import { applyTheme, readerThemes } from './theme/themes.ts'
@@ -127,7 +128,7 @@ export function Gallery() {
               <TextField value={text} onInput={setText} placeholder="Модель" />
               <SecureField value={secret} onInput={setSecret} placeholder="sk-…" ariaLabel="Ключ OpenAI" />
               <TextArea value={area} onInput={setArea} ariaLabel="Шаблон" rows={3} />
-              <SearchField value={search} onInput={setSearch} placeholder="Пошук англійською або українською" />
+              <SearchField value={search} onInput={setSearch} placeholder={`Пошук ${sourceLanguageName.instrumental} або українською`} />
             </div>
           </Section>
 

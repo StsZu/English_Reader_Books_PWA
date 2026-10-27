@@ -2,21 +2,20 @@
 // Values live in localStorage (the analogue of @AppStorage) and are exposed as signals.
 import { computed, effect, signal, type Signal } from '@preact/signals'
 import type { VoiceEngineKind } from '../../contracts.ts'
+import {
+  allDictionaries, defaultEnabledDictionaries, explanationDefaultTemplate, settingsPrefix, type ExternalDictionaryID,
+} from '../language.ts'
 
 export type ReaderThemeName = 'light' | 'sepia' | 'dark'
 export type BookFontName = 'system' | 'systemSans' | 'georgia' | 'charter' | 'iowan' | 'palatino' | 'baskerville'
 export type ReaderPanelSection = 'text' | 'parallel' | 'dictionary' | 'pronunciation'
-export type ExternalDictionaryID =
-  | 'cambridge' | 'reverso' | 'google' | 'deepl' | 'glosbe' | 'oxford' | 'merriamWebster' | 'urban' | 'forvo'
+export type { ExternalDictionaryID } from '../language.ts'
 
 export const panelSections: ReaderPanelSection[] = ['text', 'parallel', 'dictionary', 'pronunciation']
-export const allDictionaries: ExternalDictionaryID[] =
-  ['cambridge', 'reverso', 'google', 'deepl', 'glosbe', 'oxford', 'merriamWebster', 'urban', 'forvo']
-export const defaultEnabledDictionaries: ExternalDictionaryID[] = ['cambridge', 'reverso', 'google', 'deepl', 'glosbe']
+export { allDictionaries, defaultEnabledDictionaries }
 export const openAIVoices = ['coral', 'sage', 'alloy', 'ash', 'ballad', 'echo', 'fable', 'nova', 'onyx', 'shimmer', 'verse']
 
-export const defaultExplanationTemplate =
-  'Поясни українською значення слова «{слово}» у реченні: «{контекст}». Опиши відтінки значення й типові словосполучення та дай 2–3 короткі приклади вживання англійською з перекладом.'
+export const defaultExplanationTemplate = explanationDefaultTemplate
 
 export const ranges = {
   fontSize: [14, 40, 1],
@@ -66,7 +65,7 @@ const defaults = {
 export type SettingsValues = typeof defaults
 export type SettingKey = keyof SettingsValues
 
-const PREFIX = 'er.'
+const PREFIX = settingsPrefix
 
 function read<K extends SettingKey>(key: K): SettingsValues[K] {
   try {

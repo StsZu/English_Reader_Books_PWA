@@ -4,6 +4,7 @@ import {
   CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, highlightForms, initSaved, isSaved, quotes, quotesText,
   removeAllForTests, removeQuote, removeWordByLemma, saveQuote, saveWord, seedForTests, words, wordsCSV, type SavedPlace,
 } from '../../src/core/saved/saved.ts'
+import { fixtureSavedWords } from '../../src/core/language.ts'
 import { closeDB } from '../../src/core/storage/db.ts'
 
 const card = (word: string, lemma: string, forms = ''): WordCard => ({
@@ -67,9 +68,9 @@ describe('збережені слова', () => {
     expect(word.lastResultUnknown).toBe(false)
   })
 
-  it('тестовий набір містить чотири слова з фразою «look up»', async () => {
+  it('тестовий набір містить чотири слова з фразою (language.ts)', async () => {
     await seedForTests()
-    expect(words.value.map((w) => w.headword)).toEqual(['woman', 'river', 'bright', 'look up'])
+    expect(words.value.map((w) => w.headword)).toEqual(fixtureSavedWords.map(([word]) => word))
   })
 })
 

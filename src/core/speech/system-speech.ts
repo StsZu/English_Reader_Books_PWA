@@ -1,17 +1,18 @@
 // Port of SystemSpeechEngine (AVSpeechSynthesizer) on the Web Speech API. Works offline and without a key.
 import { abortError, type SpeechEngine } from '../../contracts.ts'
+import { fallbackVoiceLanguage, preferredVoiceLocale, sourceLanguage } from '../language.ts'
 
 export const NO_SYSTEM_VOICE = 'Системний голос недоступний у цьому браузері.'
 
 const synth = (): SpeechSynthesis | null => ('speechSynthesis' in globalThis ? globalThis.speechSynthesis : null)
 
-/** Best English voice: higher quality first (Premium, Enhanced, on-device), then en-GB. */
-export function bestEnglishVoice(voices: SpeechSynthesisVoice[] = synth()?.getVoices() ?? []): SpeechSynthesisVoice | null {
-  const english = voices.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith('en'))
+/** Best voice of the book language: higher quality first (Premium, Enhanced, on-device), then the preferred locale. */
+export function bestVoice(voices: SpeechSynthesisVoice[] = synth()?.getVoices() ?? []): SpeechSynthesisVoice | null {
+  const matching = voices.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(sourceLanguage))
   const quality = (v: SpeechSynthesisVoice) =>
     (/premium/i.test(v.name) ? 4 : /enhanced|neural|natural/i.test(v.name) ? 2 : 0) + (v.localService ? 1 : 0)
-  const british = (v: SpeechSynthesisVoice) => (v.lang.replace('_', '-').toLowerCase() === 'en-gb' ? 0 : 1)
-  const ranked = [...english].sort((a, b) => quality(b) - quality(a) || british(a) - british(b))
+  const preferred = (v: SpeechSynthesisVoice) => (v.lang.replace('_', '-').toLowerCase() === preferredVoiceLocale ? 0 : 1)
+  const ranked = [...matching].sort((a, b) => quality(b) - quality(a) || preferred(a) - preferred(b))
   return ranked[0] ?? null
 }
 
@@ -50,9 +51,9 @@ export class SystemSpeechEngine implements SpeechEngine {
 
   private start(speech: SpeechSynthesis) {
     const utterance = new SpeechSynthesisUtterance(this.text)
-    const voice = bestEnglishVoice()
+    const voice = bestVoice()
     if (voice) utterance.voice = voice
-    utterance.lang = voice?.lang ?? 'en-GB'
+    utterance.lang = voice?.lang ?? fallbackVoiceLanguage
     utterance.rate = Math.min(2, Math.max(0.5, this.rate))
     utterance.onend = () => this.finish(utterance)
     utterance.onerror = (event) => {

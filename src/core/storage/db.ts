@@ -1,9 +1,10 @@
 // IndexedDB schema (spec.md → «Схема даних»). One database, plain key–value object stores,
 // so every module persists the same JSON shapes the Swift app wrote to Application Support.
 import { openDB, type IDBPDatabase } from 'idb'
+import { databaseName } from '../language.ts'
 import type { KeyValueCache } from '../../contracts.ts'
 
-export const DB_NAME = 'english-reader'
+export const DB_NAME = databaseName
 const DB_VERSION = 1
 
 /**

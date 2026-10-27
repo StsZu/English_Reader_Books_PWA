@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { ReaderPanel, type ReaderPanelTab } from '../../src/ui/reader/panel/ReaderPanel.tsx'
-import { dictionaryOrder, resetAllSettings, settings } from '../../src/core/storage/settings.ts'
+import { allDictionaries, dictionaryOrder, defaultEnabledDictionaries, resetAllSettings, settings } from '../../src/core/storage/settings.ts'
 import type { Book } from '../../src/core/model/book.ts'
 
 const book: Book = {
@@ -122,20 +122,21 @@ describe('ReaderPanel', () => {
   it('manages dictionaries: enable, disable and reorder', () => {
     settings.expandedPanelSections.value = 'dictionary'
     mount()
-    expect(byID('manageDictionaries')!.textContent).toContain('5 з 9')
+    expect(byID('manageDictionaries')!.textContent).toContain(`${defaultEnabledDictionaries.length} з ${allDictionaries.length}`)
     click('manageDictionaries')
     expect(byID('dictionaryManager')).toBeTruthy()
-    click('enableDictionary-cambridge')
+    const [first, second] = allDictionaries
+    click(`enableDictionary-${first}`)
     click('enableDictionary-forvo')
-    expect(settings.enabledDictionaries.value.split(',')).not.toContain('cambridge')
+    expect(settings.enabledDictionaries.value.split(',')).not.toContain(first)
     expect(settings.enabledDictionaries.value.split(',')).toContain('forvo')
-    click('moveDown-cambridge')
-    expect(dictionaryOrder().slice(0, 2)).toEqual(['reverso', 'cambridge'])
-    click('moveUp-cambridge')
-    expect(dictionaryOrder()[0]).toBe('cambridge')
+    click(`moveDown-${first}`)
+    expect(dictionaryOrder().slice(0, 2)).toEqual([second, first])
+    click(`moveUp-${first}`)
+    expect(dictionaryOrder()[0]).toBe(first)
     click('dictionariesDone')
     expect(byID('dictionaryManager')).toBeNull()
-    expect(byID('manageDictionaries')!.textContent).toContain('5 з 9')
+    expect(byID('manageDictionaries')!.textContent).toContain(`${defaultEnabledDictionaries.length} з ${allDictionaries.length}`)
   })
 
   it('opens a chapter from the contents tab and closes the panel', () => {

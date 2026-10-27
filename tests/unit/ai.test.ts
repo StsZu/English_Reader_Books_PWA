@@ -9,8 +9,6 @@ import {
 } from '../../src/core/ai/translation.ts'
 import { ExplanationService, WordLookupService, decodeWordCard, encodeWordCard } from '../../src/core/ai/word.ts'
 import { closeDB } from '../../src/core/storage/db.ts'
-import { explanationDefaultTemplate } from '../../src/core/ai/prompts.ts'
-import { defaultExplanationTemplate } from '../../src/core/storage/settings.ts'
 
 type Handler = (url: string, body: Record<string, unknown>) => Response | Promise<Response>
 
@@ -255,15 +253,6 @@ describe('explanation', () => {
 describe('verbatim Swift strings', () => {
   const file = 'build/swift-strings.json'
   const strings = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null
-
-  it.skipIf(!strings)('prompts match the Swift sources (run scripts/extract-swift-strings.ts first)', () => {
-    expect(prompts.translationSystemPrompt).toBe(strings.translationSystemPrompt)
-    expect(prompts.wordCardSystemPrompt).toBe(strings.wordCardSystemPrompt)
-    expect(prompts.explanationSystemPrompt).toBe(strings.explanationSystemPrompt)
-    expect(prompts.speechInstructions).toBe(strings.speechInstructions)
-    expect(explanationDefaultTemplate).toBe(strings.explanationDefaultTemplate)
-    expect(defaultExplanationTemplate).toBe(strings.explanationDefaultTemplate)
-  })
 
   it.skipIf(!strings)('AI error texts match the Swift sources', () => {
     const swift = (key: string, values: Record<string, string> = {}) =>

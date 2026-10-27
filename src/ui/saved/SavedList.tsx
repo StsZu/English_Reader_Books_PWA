@@ -1,5 +1,6 @@
 // Port of EnglishReader/Views/SavedView.swift (stage 2.3, Z3, Z5): a tab of the reading panel and a screen of the library.
 import type { ComponentChildren } from 'preact'
+import { sourceLanguageName } from '../../core/language.ts'
 import { useRef, useState } from 'preact/hooks'
 import {
   filterQuotes, filterWords, quotes as savedQuotes, removeQuote, removeWord, words as savedWords,
@@ -87,7 +88,7 @@ export function SavedList({ currentBookID, existingBooks, canOpen, onOpen }: Sav
           </div>
         )}
         <div class="saved-controls">
-          <SearchField value={query} onInput={setQuery} placeholder="Пошук англійською або українською" testID="savedSearch" />
+          <SearchField value={query} onInput={setQuery} placeholder={`Пошук ${sourceLanguageName.instrumental} або українською`} testID="savedSearch" />
         </div>
         {canShare && (
           <div class="saved-controls">

@@ -1,5 +1,6 @@
 // Engine factory and short pronunciations, as created in ReaderViewModel.swift and ReaderPanel.swift.
 import { errorMessage, isAbort, type SpeechEngine, type VoiceEngineKind } from '../../contracts.ts'
+import { sampleText } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
 import { settings } from '../storage/settings.ts'
 import { OpenAISpeechEngine } from './openai-speech.ts'
@@ -63,7 +64,7 @@ export function stopPronunciation() {
   wordSpeakerSystem?.stop()
 }
 
-export const SAMPLE_TEXT = 'Reading aloud helps you hear the rhythm of English.'
+export const SAMPLE_TEXT = sampleText
 
 let sampleEngine: SpeechEngine | null = null
 

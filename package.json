@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "golden": "GOLDEN=1 vitest run tests/golden",
     "size": "node scripts/size.mjs",
+    "sibling-diff": "node scripts/sibling-diff.mjs",
     "check": "npm run build && sh scripts/check-secrets.sh && node scripts/size.mjs"
   },
   "dependencies": {

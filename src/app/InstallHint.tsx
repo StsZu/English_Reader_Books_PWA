@@ -1,11 +1,12 @@
 // FR-32: in a Safari tab (not installed) data can be evicted after 7 days without visits,
 // so the library suggests adding the app to the Home Screen once, until dismissed.
 import { useState } from 'preact/hooks'
+import { appName, settingsPrefix } from '../core/language.ts'
 import { IconButton } from '../ui/components/index.ts'
 import { Icon } from '../ui/icons.tsx'
 import { testFlags } from './test-mode.ts'
 
-const KEY = 'er.installHintDismissed'
+const KEY = `${settingsPrefix}installHintDismissed`
 
 function isAppleTouchDevice(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
@@ -33,7 +34,7 @@ export function InstallHint() {
     <aside class="install-hint" role="note" data-testid="installHint">
       <Icon name="square.and.arrow.up" size={22} />
       <span>
-        Додайте English Reader на початковий екран: «Поділитися» → «На початковий екран».
+        Додайте {appName} на початковий екран: «Поділитися» → «На початковий екран».
         Так застосунок відкриватиметься на весь екран, а книжки й збережене не видалятимуться автоматично.
       </span>
       <IconButton icon="xmark" label="Закрити підказку" tone="secondary" onClick={close} testID="installHintClose" />

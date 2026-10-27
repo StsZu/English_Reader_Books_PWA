@@ -1,6 +1,7 @@
 // Port of `enum Training` from EnglishReader/Services/Training.swift: set selection, distractors,
 // tokens and spaced-repetition levels.
 import type { SavedWord, TrainingUpdate } from '../saved/saved.ts'
+import { sourceLanguageName } from '../language.ts'
 import { wordKey } from '../saved/saved.ts'
 
 /** Random source returning values in [0, 1); injectable for deterministic tests. */
@@ -39,7 +40,7 @@ export const allExercises: Exercise[] = [Exercise.listen, Exercise.translate, Ex
 
 export const exerciseTitle: Record<Exercise, string> = {
   [Exercise.listen]: 'Почути й вибрати переклад',
-  [Exercise.translate]: 'Вибрати англійське слово',
+  [Exercise.translate]: `Вибрати ${sourceLanguageName.adjectiveNeuter} слово`,
   [Exercise.letters]: 'Набрати слово з літер',
   [Exercise.reorder]: 'Переставити літери',
   [Exercise.pronunciation]: 'Вимова',

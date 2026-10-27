@@ -1,19 +1,12 @@
 // Port of ExternalDictionary (EnglishReader/Services/AppSettings.swift): web dictionaries opened from the word card (DT2).
+// The dictionaries of the book language are in src/core/language.ts; the encoding rules are the Swift ones.
+import { dictionaryPages, type DictionaryTerm } from '../../core/language.ts'
 import type { ExternalDictionaryID } from '../../core/storage/settings.ts'
 
-const info: Record<ExternalDictionaryID, { title: string; subtitle: string }> = {
-  cambridge: { title: 'Cambridge', subtitle: 'англо-український словник' },
-  reverso: { title: 'Reverso Context', subtitle: 'приклади в контексті, англійська → українська' },
-  google: { title: 'Google Перекладач', subtitle: 'машинний переклад, англійська → українська' },
-  deepl: { title: 'DeepL', subtitle: 'машинний переклад, англійська → українська' },
-  glosbe: { title: 'Glosbe', subtitle: 'словник і приклади, англійська → українська' },
-  oxford: { title: "Oxford Learner's", subtitle: 'тлумачний словник для тих, хто вивчає англійську' },
-  merriamWebster: { title: 'Merriam-Webster', subtitle: 'тлумачний словник' },
-  urban: { title: 'Urban Dictionary', subtitle: 'сленг' },
-  forvo: { title: 'Forvo', subtitle: 'вимова носіями мови' },
+export const dictionaryInfo = (id: ExternalDictionaryID): { title: string; subtitle: string } => {
+  const { title, subtitle } = dictionaryPages[id]
+  return { title, subtitle }
 }
-
-export const dictionaryInfo = (id: ExternalDictionaryID): { title: string; subtitle: string } => info[id]
 
 /** Percent-encoding with an allowed set like Foundation's CharacterSet-based encoding. */
 function encode(text: string, keep: string): string {
@@ -38,21 +31,13 @@ function query(base: string, items: [string, string][]): string {
 export function dictionaryURL(id: ExternalDictionaryID, term: string): string | null {
   const trimmed = term.trim()
   if (!trimmed) return null
-  const path = encode(trimmed, SEGMENT_ALLOWED)
-  switch (id) {
-    case 'cambridge': {
-      const slug = trimmed.toLowerCase().replaceAll(' ', '-')
-      return 'https://dictionary.cambridge.org/dictionary/english-ukrainian/' + encode(slug, PATH_ALLOWED)
-    }
-    case 'reverso': return 'https://context.reverso.net/translation/english-ukrainian/' + path
-    case 'google': return query('https://translate.google.com/', [['sl', 'en'], ['tl', 'uk'], ['text', trimmed], ['op', 'translate']])
-    case 'deepl': return 'https://www.deepl.com/translator#en/uk/' + path
-    case 'glosbe': return 'https://glosbe.com/en/uk/' + path
-    case 'oxford': return query('https://www.oxfordlearnersdictionaries.com/search/english/', [['q', trimmed]])
-    case 'merriamWebster': return 'https://www.merriam-webster.com/dictionary/' + path
-    case 'urban': return query('https://www.urbandictionary.com/define.php', [['term', trimmed]])
-    case 'forvo': return 'https://forvo.com/word/' + path + '/#en'
+  const encoders: DictionaryTerm = {
+    text: trimmed,
+    segment: (text) => encode(text, SEGMENT_ALLOWED),
+    path: (text) => encode(text, PATH_ALLOWED),
+    query,
   }
+  return dictionaryPages[id].url(encoders)
 }
 
 /** Opens the page in a new window; an installed PWA shows it in the system Safari view (V-02). */

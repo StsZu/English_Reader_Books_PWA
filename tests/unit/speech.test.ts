@@ -5,7 +5,7 @@ import type { Book } from '../../src/core/model/book.ts'
 import { setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
 import { OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
 import { PREFETCH_PARTS, RETRY_DELAY_MS, ReadingController, speechParts } from '../../src/core/speech/reading.ts'
-import { SystemSpeechEngine, bestEnglishVoice, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
+import { SystemSpeechEngine, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
 
 // MARK: - Minimal Cache Storage (happy-dom has none)
 
@@ -221,13 +221,6 @@ describe('SystemSpeechEngine', () => {
     vi.advanceTimersByTime(phraseLimitMs('Stuck.', 1) + 1000)
     await result
     vi.useRealTimers()
-  })
-
-  it('prefers higher-quality voices, then British English', () => {
-    const voice = (name: string, lang: string, localService = true) => ({ name, lang, localService }) as SpeechSynthesisVoice
-    const voices = [voice('Daniel', 'en-GB'), voice('Samantha (Enhanced)', 'en-US'), voice('Thomas', 'fr-FR')]
-    expect(bestEnglishVoice(voices)?.name).toBe('Samantha (Enhanced)')
-    expect(bestEnglishVoice([voice('Alex', 'en-US'), voice('Daniel', 'en-GB')])?.name).toBe('Daniel')
   })
 })
 

@@ -1,6 +1,7 @@
 // «Керування словниками» (DictionaryManagerView, DT2): which web dictionaries the word card offers and in what order.
 // Shown inside the panel as a pushed page; rows reorder by dragging their handle.
 import { useRef, useState } from 'preact/hooks'
+import { dictionaryTestWord } from '../../../core/language.ts'
 import {
   dictionaryOrder, isDictionaryEnabled, setDictionaryEnabled, setDictionaryOrder, type ExternalDictionaryID,
 } from '../../../core/storage/settings.ts'
@@ -55,7 +56,7 @@ export function DictionaryManager({ onDone }: { onDone: () => void }) {
   }
 
   function test(id: ExternalDictionaryID) {
-    const url = dictionaryURL(id, 'book')
+    const url = dictionaryURL(id, dictionaryTestWord)
     if (url) window.open(url, '_blank', 'noopener')
   }
 
@@ -115,7 +116,7 @@ export function DictionaryManager({ onDone }: { onDone: () => void }) {
           })}
         </div>
         <p class="rp-footnote rp-page-footer">
-          Перетягніть рядок, щоб змінити порядок кнопок у картці слова. «Перевірити» відкриває сторінку слова «book».
+          Перетягніть рядок, щоб змінити порядок кнопок у картці слова. «Перевірити» відкриває сторінку слова «{dictionaryTestWord}».
         </p>
       </div>
     </div>

@@ -4,10 +4,14 @@
 // testAutoHideUsesLineThreshold, testParagraphPositionRestoredAfterRelaunch,
 // testParallelTranslationSettingsPersist, testFragmentSelectionTranslatesSpeaksAndCopies, playback.
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { fixtureTranslation } from '../../src/core/language.ts'
+import { demoBook } from '../fixtures/language.ts'
 
-const demo = 'The Adventures of Sherlock Holmes (excerpt)'
+const demo = demoBook.title
+const p = demoBook.paragraph
+const [w0, w1, w2] = demoBook.words
 
-const word = (page: Page, text: string, paragraph = 2): Locator =>
+const word = (page: Page, text: string, paragraph = p): Locator =>
   page.locator(`[data-p="${paragraph}"] .w`).filter({ hasText: new RegExp(`^${text}$`) }).first()
 
 async function openDemo(page: Page, query: string) {
@@ -48,27 +52,27 @@ test('переклад над текстом: перший дотик — реч
   await openDemo(page, 'testTranslation&testWordCard')
   const pane = page.getByTestId('parallelTranslationPane')
   await expect(page.getByTestId('parallelTranslationHint')).toBeVisible()
-  const paragraph = page.getByTestId('paragraph-2')
+  const paragraph = page.getByTestId(`paragraph-${p}`)
   const before = await top(paragraph)
   const paneHeight = (await pane.boundingBox())!.height
 
-  await word(page, 'woman').click()
-  await expect(page.getByTestId('translation-0-2-0')).toContainText('Для Шерлока Голмса')
-  await expect(page.locator('[data-p="2"] [data-s="0"]')).toHaveClass(/active/)
+  await word(page, w0).click()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toContainText(fixtureTranslation.split('. ')[0])
+  await expect(page.locator(`[data-p="${p}"] [data-s="0"]`)).toHaveClass(/active/)
   expect(Math.abs((await top(paragraph)) - before)).toBeLessThanOrEqual(1)
   expect((await pane.boundingBox())!.height).toBeCloseTo(paneHeight, 0)
   await expect(page.getByTestId('wordCardContent')).toHaveCount(0)
 
   // Second tap on a word of the same sentence opens its card; the sentence translation stays.
-  await word(page, 'woman').click()
+  await word(page, w0).click()
   await expect(page.getByTestId('wordCardContent')).toBeVisible()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('wordCardContent')).toHaveCount(0)
 
   // A tap on another sentence selects it instead of opening a card.
-  await word(page, 'seldom').click()
-  await expect(page.getByTestId('translation-0-2-1')).toBeVisible()
+  await word(page, w1).click()
+  await expect(page.getByTestId(`translation-0-${p}-1`)).toBeVisible()
   await expect(page.getByTestId('wordCardContent')).toHaveCount(0)
 
   // Closing keeps the reserved height and the text in place; the next tap selects again.
@@ -82,14 +86,14 @@ test('перемикач перекладу ховає панель, оригі�
   await openDemo(page, 'testTranslation&testWordCard')
   await page.getByTestId('translationToggle').click()
   await expect(page.getByTestId('parallelTranslationPane')).toHaveCount(0)
-  await expect(word(page, 'woman')).toBeVisible()
-  await word(page, 'woman').click()
+  await expect(word(page, w0)).toBeVisible()
+  await word(page, w0).click()
   await expect(page.getByTestId('wordCardContent')).toBeVisible()
 })
 
 test('без ключа — одне повідомлення з «Налаштування»', async ({ page }) => {
   await openDemo(page, '')
-  await word(page, 'woman').click()
+  await word(page, w0).click()
   await expect(page.getByTestId('noticeText')).toContainText('Не вказано ключ OpenAI')
   await page.getByTestId('openSettingsFromPane').click()
   await expect(page.getByText('Ключ OpenAI').first()).toBeVisible()
@@ -98,16 +102,16 @@ test('без ключа — одне повідомлення з «Налашт�
 test('утримання перекладеного речення озвучує його; «Ще раз» без нового синтезу', async ({ page }) => {
   await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
   const pane = page.getByTestId('parallelTranslationPane')
-  const paragraph = page.getByTestId('paragraph-2')
+  const paragraph = page.getByTestId(`paragraph-${p}`)
   const before = await top(paragraph)
   const paneHeight = (await pane.boundingBox())!.height
 
   // Long press on an inactive sentence only selects it (G4).
-  await longPress(page, word(page, 'woman'))
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await longPress(page, word(page, w0))
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   await expect(pane).toHaveAttribute('data-testvalue', /synthesis:0 speech:idle/)
 
-  await longPress(page, word(page, 'woman'))
+  await longPress(page, word(page, w0))
   await expect(pane).toHaveAttribute('data-testvalue', /synthesis:1 speech:(preparing|playing)/)
   await expect(page.getByTestId('stopSentenceSpeech')).toBeVisible()
   await page.getByTestId('stopSentenceSpeech').click()
@@ -119,7 +123,7 @@ test('утримання перекладеного речення озвучу�
     await page.getByTestId('stopSentenceSpeech').click()
     await expect(page.getByTestId('replaySentence')).toBeVisible()
   }
-  await longPress(page, word(page, 'woman'))
+  await longPress(page, word(page, w0))
   await expect(pane).toHaveAttribute('data-testvalue', /synthesis:1 /)
   await page.getByTestId('stopSentenceSpeech').click()
 
@@ -133,10 +137,10 @@ test('автоприховування за порогом у рядках', asy
   // The demo chapter fits a full iPad screen; a shorter viewport makes it scroll.
   await page.setViewportSize({ width: 834, height: 560 })
   await openDemo(page, 'testTranslation')
-  await word(page, 'woman').click()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await word(page, w0).click()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   await scrollByHand(page, 20)
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   await scrollByHand(page, 100)
   await expect(page.getByTestId('parallelTranslationHint')).toBeVisible()
 
@@ -149,10 +153,10 @@ test('автоприховування за порогом у рядках', asy
   await page.getByTestId('panelBackdrop').click({ position: { x: 20, y: 400 } })
   await page.getByTestId('readerScroll').evaluate((el) => { el.scrollTop = 0 })
   await page.waitForTimeout(300)
-  await word(page, 'woman').click()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await word(page, w0).click()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   await scrollByHand(page, 120)
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   await scrollByHand(page, 250)
   await expect(page.getByTestId('parallelTranslationHint')).toBeVisible()
 
@@ -165,31 +169,36 @@ test('автоприховування за порогом у рядках', asy
 test('програмне прокручування не приховує переклад', async ({ page }) => {
   await page.setViewportSize({ width: 834, height: 560 })
   await openDemo(page, 'testTranslation')
-  await word(page, 'woman').click()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await word(page, w0).click()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
   // Reading aloud follows the text with programmatic scrolling (A4).
   await page.getByTestId('playButton').click()
   await page.waitForTimeout(300)
   await page.getByTestId('readerScroll').evaluate((el) => el.scrollTo({ top: 300 }))
   await page.waitForTimeout(300)
   expect(await page.getByTestId('readerScroll').evaluate((el) => el.scrollTop)).toBeGreaterThan(100)
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible()
 })
 
 test('позиція абзацу відновлюється після перезапуску', async ({ page }) => {
   await page.setViewportSize({ width: 834, height: 500 })
   await openDemo(page, '')
-  await page.getByTestId('readerScroll').evaluate((el) => {
-    const p = el.querySelector<HTMLElement>('[data-p="4"]')!
+  const { nextChapter, paragraph: index, status } = demoBook.position
+  if (nextChapter) {
+    await page.getByTestId('nextChapter').scrollIntoViewIfNeeded()
+    await page.getByTestId('nextChapter').click()
+  }
+  await page.getByTestId('readerScroll').evaluate((el, index) => {
+    const p = el.querySelector<HTMLElement>(`[data-p="${index}"]`)!
     el.scrollTop = p.offsetTop - 28
-  })
-  await expect(page.getByTestId('playbackStatus')).toHaveText('Розділ 1 з 2 · абзац 5')
+  }, index)
+  await expect(page.getByTestId('playbackStatus')).toHaveText(status)
   await page.waitForTimeout(400)
 
   await page.goto('./')
   await page.getByTestId(`book-${demo}`).click()
-  await expect(page.getByTestId('playbackStatus')).toHaveText('Розділ 1 з 2 · абзац 5')
-  const paragraph = page.getByTestId('paragraph-4')
+  await expect(page.getByTestId('playbackStatus')).toHaveText(status)
+  const paragraph = page.getByTestId(`paragraph-${index}`)
   const scroller = (await page.getByTestId('readerScroll').boundingBox())!
   expect(Math.abs((await top(paragraph)) - scroller.y - 28)).toBeLessThan(4)
 })
@@ -218,10 +227,10 @@ test('виділення фрагмента: переклад, прослухо�
   const paneHeight = (await pane.boundingBox())!.height
 
   // Forward across a sentence boundary.
-  await longPress(page, word(page, 'woman'), word(page, 'seldom'))
+  await longPress(page, word(page, demoBook.forwardFragment.from), word(page, demoBook.forwardFragment.to))
   await expect(page.getByTestId('fragmentBadge')).toBeVisible()
   await expect(page.getByTestId('fragmentTranslation')).toBeVisible()
-  await expect(page.locator('[data-p="2"] .w.sel')).toHaveCount(4)
+  await expect(page.locator(`[data-p="${p}"] .w.sel`)).toHaveCount(demoBook.forwardFragment.count)
   await expect(page.getByTestId('wordCardContent')).toHaveCount(0)
   await expect(pane).toHaveAttribute('data-testvalue', /synthesis:0/)
 
@@ -233,13 +242,13 @@ test('виділення фрагмента: переклад, прослухо�
   await expect(page.getByTestId('copyFragment')).toHaveText(/Скопійовано/)
 
   // Backward selection.
-  await longPress(page, word(page, 'heard'), word(page, 'have'))
-  await expect(page.locator('[data-p="2"] .w.sel')).toHaveCount(3)
+  await longPress(page, word(page, demoBook.backwardFragment.from), word(page, demoBook.backwardFragment.to))
+  await expect(page.locator(`[data-p="${p}"] .w.sel`)).toHaveCount(demoBook.backwardFragment.count)
 
   // A tap resets the fragment and selects the sentence (G1).
-  await word(page, 'eclipses').click()
+  await word(page, w2).click()
   await expect(page.getByTestId('fragmentBadge')).toHaveCount(0)
-  await expect(page.getByTestId('translation-0-2-2')).toBeVisible()
+  await expect(page.getByTestId(`translation-0-${p}-2`)).toBeVisible()
   expect((await pane.boundingBox())!.height).toBeCloseTo(paneHeight, 0)
 })
 
@@ -259,33 +268,33 @@ test('читання вголос: Слухати → Пауза → Продо�
 
 test('читання вголос з вибраного речення; утримання речення посеред читання не зависає', async ({ page }) => {
   await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
-  await word(page, 'eclipses').click()
-  await expect(page.getByTestId('translation-0-2-2')).toBeVisible()
+  await word(page, w2).click()
+  await expect(page.getByTestId(`translation-0-${p}-2`)).toBeVisible()
   await page.getByTestId('playButton').click()
   await expect(page.getByTestId('pauseButton')).toBeVisible()
   // Reading starts at the selected sentence, not at the top of the page.
-  await expect(page.locator('[data-p="2"] .s.active[data-s="2"]')).toBeVisible({ timeout: 5_000 })
+  await expect(page.locator(`[data-p="${p}"] .s.active[data-s="2"]`)).toBeVisible({ timeout: 5_000 })
   await expect(page.locator('.s.active')).toHaveCount(1)
 
   // A long press speaks the translated sentence: reading pauses and then goes on.
   await page.waitForTimeout(800) // reading scrolls to the paragraph first
-  await longPress(page, word(page, 'eclipses'))
+  await longPress(page, word(page, w2))
   await expect(page.getByTestId('resumeButton')).toBeVisible()
   if (await page.getByTestId('stopSentenceSpeech').isVisible()) await page.getByTestId('stopSentenceSpeech').click()
   await page.getByTestId('resumeButton').click()
   await expect(page.getByTestId('pauseButton')).toBeVisible()
-  await expect(page.locator('[data-p="2"] .s.active:is([data-s="1"], [data-s="3"])')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator(`[data-p="${p}"] .s.active:is([data-s="1"], [data-s="3"])`)).toBeVisible({ timeout: 15_000 })
   await page.getByTestId('stopButton').click()
   await expect(page.getByTestId('playButton')).toBeVisible()
 })
 
 test('читання голосом з клавіатури: пробіл — «Слухати» / «Пауза» / «Продовжити», Enter — вибране речення', async ({ page }) => {
   await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
-  await word(page, 'eclipses').click()
-  await expect(page.getByTestId('translation-0-2-2')).toBeVisible()
+  await word(page, w2).click()
+  await expect(page.getByTestId(`translation-0-${p}-2`)).toBeVisible()
   await page.keyboard.press('Space')
   await expect(page.getByTestId('pauseButton')).toBeVisible()
-  await expect(page.locator('[data-p="2"] .s.active[data-s="2"]')).toBeVisible({ timeout: 5_000 })
+  await expect(page.locator(`[data-p="${p}"] .s.active[data-s="2"]`)).toBeVisible({ timeout: 5_000 })
   await page.keyboard.press('Space')
   await expect(page.getByTestId('resumeButton')).toBeVisible()
   await page.keyboard.press('Space')

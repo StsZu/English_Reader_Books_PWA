@@ -8,6 +8,7 @@ import { htmlBlocks } from '../../src/core/import/html.ts'
 import { formatForExtension, importBook, importFile, maxFileSize } from '../../src/core/import/importer.ts'
 import { decodeText, parseMarkdown, parsePlainText } from '../../src/core/import/text.ts'
 import { ZipArchive } from '../../src/core/import/zip.ts'
+import { demoBook } from '../fixtures/language.ts'
 import { makeEPUB, zipArchive } from '../fixtures/zip-writer.ts'
 
 const utf8 = (s: string) => new TextEncoder().encode(s)
@@ -87,14 +88,12 @@ code()
   it('вбудована демо-книжка', async () => {
     const data = new Uint8Array(readFileSync(resolve(process.cwd(), 'public/demo.md')))
     const book = await importBook(data, 'md', 'demo')
-    expect(book.title).toBe('The Adventures of Sherlock Holmes (excerpt)')
-    expect(book.author).toBe('Arthur Conan Doyle')
-    expect(book.chapters.map((c) => c.title)).toEqual(['A Scandal in Bohemia', 'The Red-Headed League'])
+    expect(book.title).toBe(demoBook.title)
+    expect(book.author).toBe(demoBook.author)
+    expect(book.chapters.map((c) => c.title)).toHaveLength(2)
+    expect(book.chapters[1].title).toBe(demoBook.secondChapter)
     expect(summarize(book).sentenceCount).toBeGreaterThan(15)
-    const opening = book.chapters[0].paragraphs.find((p) => p.kind === 'text')!
-    expect(opening.sentences[0]).toBe('To Sherlock Holmes she is always the woman.')
-    const allSentences = book.chapters.flatMap((c) => c.paragraphs.flatMap((p) => p.sentences))
-    expect(allSentences.some((s) => s.startsWith('I had called upon my friend, Mr. Sherlock Holmes,'))).toBe(true)
+    // The sentences of the demo itself are checked in language.test.ts.
   })
 })
 

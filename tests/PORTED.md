@@ -7,7 +7,7 @@
 | Тест Swift | Тест PWA |
 |---|---|
 | testSentenceSegmentation, testWordRangesSkipPunctuation | `tests/unit/segmenter.test.ts` |
-| testPlainTextParagraphsAndChapters, testPlainTextOneParagraphPerLine, testWindows1251Decoding, testMarkdownStripsSyntax, testBundledDemoBookImports, testHTMLExtraction, testEPUBImport, testEPUBWithDRMIsRejected, testFontObfuscationIsNotDRM, testGarbageFileFailsGracefully, testPathResolution | `tests/unit/import.test.ts` |
+| testPlainTextParagraphsAndChapters, testPlainTextOneParagraphPerLine, testWindows1251Decoding, testMarkdownStripsSyntax, testBundledDemoBookImports, testHTMLExtraction, testEPUBImport, testEPUBWithDRMIsRejected, testFontObfuscationIsNotDRM, testGarbageFileFailsGracefully, testPathResolution | `tests/unit/import.test.ts` (речення демо-книжки — `tests/unit/language.test.ts`) |
 | testRealEPUBFromDisk | `tests/golden/golden.test.ts` (`npm run golden`, Gutenberg #1661 проти нативного імпортера) |
 | testHTTPErrorMapping, testWordCardDecodingToleratesMissingOptionalFields, testTranslationStorePersistsAcrossInstances, testMissingKeyIsReportedBeforeNetwork, testWordCardDecodesLevelAndFormsAndOldCards, testExplanationIsCachedAndRegeneratedOnlyOnRequest | `tests/unit/ai.test.ts` |
 | testReadingQueueCrossesChapters, testSpeechEngineReplaysSavedAudioWithoutSynthesis, testConcurrentSpeechRequestsShareOneSynthesis | `tests/unit/speech.test.ts` (описові назви українською) |
@@ -18,7 +18,7 @@
 | testFragmentUsesAppleFallbackAndReportsKeyErrors | `tests/unit/reader-model.test.ts` — лише частина про помилки ключа й мережі (V-01) |
 | testSavedWordsMergeContextsByLemmaAndPersist, testSavedQuotesAreUniqueAndExportEscapes, testOldSavedWordsDecodeWithoutTrainingFields | `tests/unit/saved.test.ts` |
 | testAutomaticSetOrderAndLevels, testTrainingOptionsAvoidDuplicatesAndOwnMeanings, testTrainingSessionMistakesRepeatsAndResults, testReorderWrongMoveCountsAndSkipLeavesNoResult, testReorderKeyboardPlacesLettersLeftToRight, testReorderKeyboardAcceptsTheWholeWord, testReorderKeyboardAlwaysStartsFromTheFirstLetterAndFlashes | `tests/unit/training.test.ts` |
-| testExternalDictionaryURLs, testDictionaryOrderAndEnabledSetPersist | `tests/unit/dictionaries.test.ts` |
+| testExternalDictionaryURLs, testDictionaryOrderAndEnabledSetPersist | `tests/unit/dictionaries.test.ts`; адреси словників мови — `tests/unit/language.test.ts` |
 | LiveOpenAITests (9): testTranslatesParagraphSentenceBySentence, testFragmentIsTranslatedWithContext, testWordCardHasLevelAndIrregularForms, testExplanationIsUkrainian, testWordCardUsesContext, testInvalidKeyIsReportedClearly, testSpeechReturnsPlayableAudio, testSentenceAudioIsSynthesizedOnceAndReplayedFromCache, testTrainingWordsAudioIsPreparedOnce | `tests/live/ai.live.test.ts` — переклад, фрагмент, картки, пояснення; **аудіо й недійсний ключ ще не перенесено**, прогін — лише з дозволом (T55) |
 
 **Не переносяться (V-01, немає Apple Translation у Safari):** testMissingKeyAndOfflineUseAppleFallbackWithSeparateCache, testOtherErrorsAndDisabledSettingDoNotUseApple, testUnavailableAppleKeepsAIErrorWithExplanation, testAppleTranslationIsReplacedByAIWhenAIWorksAgain.

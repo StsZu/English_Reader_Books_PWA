@@ -1,7 +1,10 @@
 // Port of MainScenarioUITests.testSavedWordsAndQuotes (stage 2.3, Z1–Z6).
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { demoBook } from '../fixtures/language.ts'
 
-const demoTitle = 'The Adventures of Sherlock Holmes (excerpt)'
+const demoTitle = demoBook.title
+const [first, second] = demoBook.words
+const p = demoBook.paragraph
 
 const word = (page: Page, text: string): Locator =>
   page.locator('[data-p] .w').filter({ hasText: new RegExp(`^${text}$`) }).first()
@@ -20,11 +23,11 @@ test('збережені слова й цитати: картка, фрагме�
   await page.goto('./?reset&voice=system&testTranslation&testWordCard')
   await page.getByTestId(`book-${demoTitle}`).click()
 
-  const woman = word(page, 'woman')
-  await expect(woman).toBeVisible({ timeout: 10_000 })
-  await woman.click()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible({ timeout: 5_000 })
-  await woman.click()
+  const firstWord = word(page, first)
+  await expect(firstWord).toBeVisible({ timeout: 10_000 })
+  await firstWord.click()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible({ timeout: 5_000 })
+  await firstWord.click()
   const save = page.getByTestId('saveWordButton')
   await expect(save).toHaveText(/Зберегти/)
   await save.click()
@@ -33,7 +36,7 @@ test('збережені слова й цитати: картка, фрагме�
   await expect(save).toBeHidden()
 
   // A quote from a selected fragment.
-  await longPressDrag(page, woman, word(page, 'seldom'))
+  await longPressDrag(page, firstWord, word(page, second))
   const saveFragment = page.getByTestId('saveFragment')
   await expect(saveFragment).toBeVisible({ timeout: 5_000 })
   await saveFragment.click()
@@ -52,13 +55,13 @@ test('збережені слова й цитати: картка, фрагме�
 
   // The saved tab of the panel: the word and its context open the place.
   await page.getByTestId('panelTabSaved').click()
-  const savedWord = page.getByTestId('savedWord-woman')
+  const savedWord = page.getByTestId(`savedWord-${first}`)
   await expect(savedWord).toBeVisible()
   await page.screenshot({ path: 'build/visual/saved-tab.png' })
   await savedWord.click()
-  await page.getByTestId('savedContext-woman').first().click()
+  await page.getByTestId(`savedContext-${first}`).first().click()
   await expect(page.getByTestId('readerPanel')).toBeHidden()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible({ timeout: 5_000 })
   await page.screenshot({ path: 'build/visual/saved-word-highlight.png' })
   await page.getByTestId('contentsButton').click()
   await page.getByTestId('panelTabSaved').click()
@@ -72,11 +75,11 @@ test('збережені слова й цитати: картка, фрагме�
   await page.getByTestId('chapter-1').click()
   await page.getByTestId('backButton').click()
   await page.getByTestId('savedButton').click()
-  const libraryWord = page.getByTestId('savedWord-woman')
+  const libraryWord = page.getByTestId(`savedWord-${first}`)
   await expect(libraryWord).toBeVisible()
   await libraryWord.click()
-  await page.getByTestId('savedContext-woman').first().click()
-  await expect(page.getByTestId('translation-0-2-0')).toBeVisible({ timeout: 10_000 })
+  await page.getByTestId(`savedContext-${first}`).first().click()
+  await expect(page.getByTestId(`translation-0-${p}-0`)).toBeVisible({ timeout: 10_000 })
   await page.getByTestId('backButton').click()
   await page.getByTestId('savedButton').click()
   await expect(libraryWord).toBeVisible()

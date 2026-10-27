@@ -1,6 +1,7 @@
 // One audio element for the whole app (analogue of the shared AVAudioSession): iOS allows sound
 // only after a user gesture, and reusing the element unlocked by that gesture keeps later playback allowed.
 import { abortError } from '../../contracts.ts'
+import { appName } from '../language.ts'
 
 /** Playback backend; replaced in unit tests, where happy-dom cannot decode audio. */
 export interface AudioBackend {
@@ -176,12 +177,12 @@ export interface MediaSessionHandlers {
   nexttrack?: () => void
 }
 
-export function setMediaSessionHandlers(handlers: MediaSessionHandlers | null, title = 'English Reader') {
+export function setMediaSessionHandlers(handlers: MediaSessionHandlers | null, title = appName) {
   const session = (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession
   if (!session) return
   try {
     if (handlers) {
-      session.metadata = typeof MediaMetadata !== 'undefined' ? new MediaMetadata({ title, artist: 'English Reader' }) : null
+      session.metadata = typeof MediaMetadata !== 'undefined' ? new MediaMetadata({ title, artist: appName }) : null
     }
     const seekto = handlers?.seekto
     const actions: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [

@@ -1,11 +1,15 @@
 // Port of MainScenarioUITests.testDictionaryTranslationCardAndSettings (stage 2.2: DT2–DT6).
 import { expect, test, type Page } from '@playwright/test'
+import { defaultEnabledDictionaries, fixtureCard } from '../../src/core/language.ts'
+import { demoBook } from '../fixtures/language.ts'
 
-const demoTitle = 'The Adventures of Sherlock Holmes (excerpt)'
+const demoTitle = demoBook.title
 const id = (page: Page, testID: string) => page.locator(`[data-testid="${testID}"]`)
 
-/** The first «woman» in the demo text: chapter 0, paragraph 2, sentence 0. */
-const woman = (page: Page) => page.locator('[data-p="2"] [data-s="0"] .w', { hasText: /^woman$/ }).first()
+/** The first word of the first text paragraph of the demo, sentence 0. */
+const firstWord = (page: Page) =>
+  page.locator(`[data-p="${demoBook.paragraph}"] [data-s="0"] .w`, { hasText: new RegExp(`^${demoBook.words[0]}$`) }).first()
+const firstDictionary = defaultEnabledDictionaries[0]
 
 async function closeCard(page: Page) {
   await page.keyboard.press('Escape')
@@ -15,17 +19,17 @@ async function closeCard(page: Page) {
 test('картка слова: рівень, форми, словники, пояснення й налаштування розділу', async ({ page }) => {
   await page.goto('./?reset&voice=system&testTranslation&testWordCard')
   await id(page, `book-${demoTitle}`).click()
-  await expect(woman(page)).toBeVisible({ timeout: 10_000 })
-  await woman(page).click()
-  await expect(id(page, 'translation-0-2-0')).toBeVisible({ timeout: 5_000 })
-  await woman(page).click()
+  await expect(firstWord(page)).toBeVisible({ timeout: 10_000 })
+  await firstWord(page).click()
+  await expect(id(page, `translation-0-${demoBook.paragraph}-0`)).toBeVisible({ timeout: 5_000 })
+  await firstWord(page).click()
 
   // DT3, DT4, DT2: level, forms and the default five dictionaries.
-  await expect(id(page, 'wordContextTranslation')).toHaveText('жінка', { timeout: 5_000 })
-  await expect(id(page, 'wordLevel')).toHaveAttribute('aria-label', 'Рівень A1')
-  await expect(id(page, 'wordForms')).toHaveText('woman — women')
+  await expect(id(page, 'wordContextTranslation')).toHaveText(fixtureCard.contextTranslation, { timeout: 5_000 })
+  await expect(id(page, 'wordLevel')).toHaveAttribute('aria-label', `Рівень ${fixtureCard.level}`)
+  await expect(id(page, 'wordForms')).toHaveText(fixtureCard.forms)
   await expect(id(page, 'wordIrregular')).toBeVisible()
-  for (const dictionary of ['cambridge', 'reverso', 'google', 'deepl', 'glosbe']) {
+  for (const dictionary of defaultEnabledDictionaries) {
     await expect(id(page, `dictionary-${dictionary}`), dictionary).toBeVisible()
   }
   await expect(id(page, 'dictionary-forvo')).toHaveCount(0)
@@ -35,7 +39,7 @@ test('картка слова: рівень, форми, словники, по�
   await expect(id(page, 'wordExplanation')).toBeVisible({ timeout: 5_000 })
   await page.screenshot({ path: 'build/visual/25-word-card-dictionary.png' })
   await closeCard(page)
-  await woman(page).click()
+  await firstWord(page).click()
   await expect(id(page, 'wordExplanation')).toBeVisible({ timeout: 5_000 })
   await expect(id(page, 'explainAgainButton')).toBeVisible()
   await closeCard(page)
@@ -56,10 +60,10 @@ test('картка слова: рівень, форми, словники, по�
   await page.screenshot({ path: 'build/visual/26-dictionary-section.png' })
   await id(page, 'manageDictionaries').scrollIntoViewIfNeeded()
   await id(page, 'manageDictionaries').click()
-  const cambridge = id(page, 'enableDictionary-cambridge')
-  await expect(cambridge).toBeVisible({ timeout: 3_000 })
-  await cambridge.click()
-  await expect(cambridge).toHaveAttribute('aria-checked', 'false')
+  const firstToggle = id(page, `enableDictionary-${firstDictionary}`)
+  await expect(firstToggle).toBeVisible({ timeout: 3_000 })
+  await firstToggle.click()
+  await expect(firstToggle).toHaveAttribute('aria-checked', 'false')
   const forvo = id(page, 'enableDictionary-forvo')
   await forvo.scrollIntoViewIfNeeded()
   await forvo.click()
@@ -69,11 +73,11 @@ test('картка слова: рівень, форми, словники, по�
   await id(page, 'closePanel').click()
   await expect(id(page, 'readerPanel')).toHaveCount(0)
 
-  await woman(page).click()
+  await firstWord(page).click()
   await expect(id(page, 'wordContextTranslation')).toBeVisible({ timeout: 5_000 })
   await expect(id(page, 'wordLevel')).toHaveCount(0)
   await expect(id(page, 'wordForms')).toBeVisible()
-  await expect(id(page, 'dictionary-cambridge')).toHaveCount(0)
+  await expect(id(page, `dictionary-${firstDictionary}`)).toHaveCount(0)
   await expect(id(page, 'dictionary-forvo')).toBeVisible()
   const scale = await id(page, 'wordCardContent').evaluate((e) => getComputedStyle(e).getPropertyValue('--card-scale').trim())
   expect(Number(scale)).toBeCloseTo(1.1)

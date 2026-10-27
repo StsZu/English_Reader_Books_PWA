@@ -1,6 +1,7 @@
 // Port of EnglishReader/Services/TranslationService.swift (AI part) and the fragment cache from
 // Views/ReaderViewModel.swift. The Apple on-device fallback is not ported (spec.md V-01).
 import { AIError, type TranslationProvider } from '../../contracts.ts'
+import { fixtureTranslation } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
 import { paragraphKey, type ParagraphRef } from '../model/book.ts'
 import { cache } from '../storage/db.ts'
@@ -45,7 +46,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
 /** Debug fixture (`?testTranslation`, analogue of -uiTestTranslation): long Ukrainian text without network. */
 export class TestTranslationProvider implements TranslationProvider {
   static readonly line =
-    'Для Шерлока Голмса вона завжди залишалася тією жінкою. Цей довгий український переклад використовується лише для перевірки перенесення рядків, прокручування панелі та незмінного розташування англійського тексту під час вибору речення.'
+    fixtureTranslation
 
   async translate(sentences: string[]): Promise<string[]> {
     translationStats.requests++

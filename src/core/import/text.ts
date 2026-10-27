@@ -1,5 +1,6 @@
 // Port of EnglishReader/Import/TextImporter.swift: decoding, plain text and Markdown.
 import { ImportError } from '../../contracts.ts'
+import { chapterHeading } from '../language.ts'
 import type { RawBook, RawChapter } from '../model/book.ts'
 import { normalizeWhitespace } from '../model/segmenter.ts'
 
@@ -33,7 +34,7 @@ export function decodeText(data: Uint8Array): string {
 
 // MARK: - Plain text
 
-const chapterPattern = /^(chapter|part|book|prologue|epilogue)\b.{0,60}$/i
+const chapterPattern = chapterHeading
 
 export function isChapterHeading(paragraph: string): boolean {
   return [...paragraph].length <= 70 && chapterPattern.test(paragraph)
