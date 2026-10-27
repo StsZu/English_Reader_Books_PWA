@@ -10,7 +10,7 @@ export interface ZipEntry {
 }
 
 export class ZipError extends Error {
-  constructor(readonly reason: 'notAZip' | 'corrupted' | 'unsupportedMethod', readonly method?: number) {
+  constructor(readonly reason: 'notAZip' | 'corrupted' | 'unsupportedMethod' | 'tooLarge', readonly method?: number) {
     super(`ZIP: ${reason}${method !== undefined ? ` ${method}` : ''}`)
     this.name = 'ZipError'
   }
@@ -18,11 +18,15 @@ export class ZipError extends Error {
 
 const utf8 = new TextDecoder('utf-8')
 
+/** Total unpacked bytes one archive may produce (R4): a 50 MB file must not expand into gigabytes in memory. */
+export const maxUnpackedSize = 200 * 1024 * 1024
+
 export class ZipArchive {
   readonly entries = new Map<string, ZipEntry>()
   private readonly view: DataView
+  private unpacked = 0
 
-  constructor(private readonly data: Uint8Array) {
+  constructor(private readonly data: Uint8Array, private readonly budget = maxUnpackedSize) {
     this.view = new DataView(data.buffer, data.byteOffset, data.byteLength)
     this.readCentralDirectory()
   }
@@ -41,7 +45,12 @@ export class ZipArchive {
     const payload = this.data.subarray(start, start + entry.compressedSize)
     switch (entry.method) {
       case 0: return payload
-      case 8: return inflate(payload, entry.uncompressedSize)
+      case 8: {
+        // The size from the central directory is checked before inflating; inflate() never goes past it.
+        if (entry.uncompressedSize > this.budget - this.unpacked) throw new ZipError('tooLarge')
+        this.unpacked += entry.uncompressedSize
+        return inflate(payload, entry.uncompressedSize)
+      }
       default: throw new ZipError('unsupportedMethod', entry.method)
     }
   }
@@ -87,16 +96,30 @@ export class ZipArchive {
   }
 }
 
-/** Raw-deflate decode; the result must have the size recorded in the central directory. */
+/**
+ * Raw-deflate decode; the result must have the size recorded in the central directory.
+ * Streams into a buffer of that size and stops as soon as the data would exceed it.
+ */
 export async function inflate(payload: Uint8Array, expectedSize: number): Promise<Uint8Array> {
   if (expectedSize === 0) return new Uint8Array()
-  let output: Uint8Array
+  const output = new Uint8Array(expectedSize)
+  let length = 0
   try {
-    const stream = new Blob([payload as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-    output = new Uint8Array(await new Response(stream).arrayBuffer())
-  } catch {
+    const reader = new Blob([payload as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (length + value.length > expectedSize) {
+        await reader.cancel().catch(() => {})
+        throw new ZipError('corrupted')
+      }
+      output.set(value, length)
+      length += value.length
+    }
+  } catch (error) {
+    if (error instanceof ZipError) throw error
     throw new ZipError('corrupted')
   }
-  if (output.length !== expectedSize) throw new ZipError('corrupted')
+  if (length !== expectedSize) throw new ZipError('corrupted')
   return output
 }

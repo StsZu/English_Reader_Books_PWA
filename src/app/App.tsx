@@ -6,7 +6,8 @@ import { testFlags } from './test-mode.ts'
 import { addBook, books, initLibrary, lastError, resetAll, seedDemoIfNeeded } from '../core/storage/library.ts'
 import { initKey } from '../core/storage/key.ts'
 import { initSaved, removeAllForTests, seedForTests } from '../core/saved/saved.ts'
-import { requestPersistence } from '../core/storage/db.ts'
+import { requestPersistence, storageError } from '../core/storage/db.ts'
+import { removeOrphanAudio } from '../core/audiobook/store.ts'
 import { settings } from '../core/storage/settings.ts'
 import { importBook, importFile } from '../core/import/importer.ts'
 import { warmUpVoices } from '../core/speech/system-speech.ts'
@@ -18,6 +19,7 @@ import { AIServices } from '../ui/settings/AIServices.tsx'
 import { Gallery } from '../ui/Gallery.tsx'
 import { errorMessage } from '../contracts.ts'
 import { InstallHint } from './InstallHint.tsx'
+import { ConfirmDialog } from '../ui/components/index.ts'
 
 effect(() => applyTheme(settings.theme.value))
 
@@ -36,6 +38,7 @@ async function start() {
   if (__TEST_MODE__ && testFlags.reset && testFlags.savedWords) seedForTests()
   if (__TEST_MODE__ && testFlags.voice) settings.voiceEngine.value = testFlags.voice
   await seedDemoIfNeeded(loadDemo)
+  await removeOrphanAudio(books.value.map((b) => b.id)).catch(() => {})
   if (__TEST_MODE__ && testFlags.importPath) {
     try {
       const response = await fetch(testFlags.importPath)
@@ -68,6 +71,14 @@ export function App() {
       {reader ? <ReaderScreen key={current.bookID} bookID={current.bookID} /> : <><LibraryScreen /><InstallHint /></>}
       {trainingOpen.value && <TrainingScreen onClose={closeTraining} />}
       <AIServices open={aiServicesOpen.value} onClose={() => { aiServicesOpen.value = false }} />
+      <ConfirmDialog
+        open={storageError.value !== null}
+        title="Не вдалося зберегти"
+        message={storageError.value ?? ''}
+        actions={[{ label: 'Гаразд', role: 'cancel', testID: 'storageErrorOK' }]}
+        onClose={() => { storageError.value = null }}
+        testID="storageError"
+      />
     </>
   )
 }

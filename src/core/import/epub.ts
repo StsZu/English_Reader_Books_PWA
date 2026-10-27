@@ -5,7 +5,7 @@ import { ImportError } from '../../contracts.ts'
 import type { RawBlock, RawBook, RawChapter } from '../model/book.ts'
 import { normalizeWhitespace } from '../model/segmenter.ts'
 import { decodeEntities, htmlBlocks } from './html.ts'
-import { ZipArchive } from './zip.ts'
+import { ZipArchive, ZipError } from './zip.ts'
 
 interface XMLTag {
   name: string
@@ -145,7 +145,11 @@ export function chapterTitle(blocks: RawBlock[], index: number): string {
   return [...title].slice(0, 80).join('')
 }
 
-export async function parseEPUB(data: Uint8Array, fallbackTitle: string): Promise<RawBook> {
+/**
+ * `unreadable` collects the spine files that are listed but cannot be read from the archive (R2):
+ * the book is imported without them and the library says so. Empty pages (a cover) are skipped silently.
+ */
+export async function parseEPUB(data: Uint8Array, fallbackTitle: string, unreadable: string[] = []): Promise<RawBook> {
   let zip: ZipArchive
   try {
     zip = new ZipArchive(data)
@@ -171,8 +175,15 @@ export async function parseEPUB(data: Uint8Array, fallbackTitle: string): Promis
   for (const idref of pkg.spine) {
     const item = pkg.manifest.get(idref)
     if (!item || !(item.mediaType.includes('html') || item.href.endsWith('html') || item.href.endsWith('htm'))) continue
-    const html = await zip.readText(resolveHref(item.href, baseDir)).catch(() => null)
-    if (html === null) continue
+    const path = resolveHref(item.href, baseDir)
+    let html: string
+    try {
+      html = await zip.readText(path)
+    } catch (error) {
+      if (error instanceof ZipError && error.reason === 'tooLarge') throw new ImportError({ kind: 'tooLargeUnpacked' })
+      unreadable.push(path.split('/').pop() || path)
+      continue
+    }
     const blocks = htmlBlocks(html)
     if (!(blocks.some((b) => b.kind === 'text') || blocks.length > 1)) continue
     chapters.push({ title: chapterTitle(blocks, chapters.length), blocks })

@@ -57,6 +57,7 @@ export const abortError = (): DOMException => new DOMException('Скасован
 export type ImportErrorKind =
   | { kind: 'unsupportedFormat'; ext: string }
   | { kind: 'tooLarge' }
+  | { kind: 'tooLargeUnpacked' }
   | { kind: 'unreadable' }
   | { kind: 'emptyText' }
   | { kind: 'drmProtected' }
@@ -73,6 +74,7 @@ export function importErrorText(e: ImportErrorKind): string {
   switch (e.kind) {
     case 'unsupportedFormat': return `Формат «.${e.ext}» не підтримується. Підтримуються EPUB (без DRM), TXT і MD.`
     case 'tooLarge': return 'Файл завеликий (понад 50 МБ).'
+    case 'tooLargeUnpacked': return 'Книжка завелика: розпакований вміст EPUB перевищує 200 МБ.'
     case 'unreadable': return 'Не вдалося прочитати файл.'
     case 'emptyText': return 'У файлі не знайдено тексту для читання.'
     case 'drmProtected': return 'Книжка захищена DRM. Імпортуйте копію без захисту.'

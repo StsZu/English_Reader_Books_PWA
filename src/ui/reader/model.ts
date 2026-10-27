@@ -17,6 +17,7 @@ import { ReadingController } from '../../core/speech/reading.ts'
 import { AudiobookPlayer, RATES } from '../../core/audiobook/player.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
+import { isQuotaError, storageError, storageErrorText } from '../../core/storage/db.ts'
 import { settings } from '../../core/storage/settings.ts'
 import {
   isSaved, pendingSentence, quoteFor, removeQuote, removeWordByLemma, saveQuote, saveWord, setPendingSentence,
@@ -211,8 +212,16 @@ export class ReaderModel {
     if (active) this.speakSentence(active, false)
   }
 
+  private positionErrorShown = false
+
   savePosition() {
-    if (this.ready.value) void savePosition(this.book.id, this.position)
+    if (!this.ready.value) return
+    // The next save repeats a failed write; only a full storage is worth telling the reader, once (R7).
+    savePosition(this.book.id, this.position).catch((error) => {
+      if (!isQuotaError(error) || this.positionErrorShown) return
+      this.positionErrorShown = true
+      storageError.value = `Не вдалося зберегти місце читання: ${storageErrorText(error)}`
+    })
   }
 
   goToChapter(index: number, paragraph = 0) {

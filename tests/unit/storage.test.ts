@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Book } from '../../src/core/model/book.ts'
-import { closeDB, getValue, setValue } from '../../src/core/storage/db.ts'
+import { DB_NAME, closeDB, getValue, setValue } from '../../src/core/storage/db.ts'
 import { addBook, books, deleteBook, initLibrary, loadBook, resetAll, seedDemoIfNeeded } from '../../src/core/storage/library.ts'
 import { clearPosition, loadPosition, savePosition } from '../../src/core/storage/positions.ts'
 import { deleteKey, hasStoredKey, initKey, openAIKey, saveKey } from '../../src/core/storage/key.ts'
@@ -24,6 +24,17 @@ beforeEach(async () => {
   await resetAll()
   await deleteKey()
 })
+
+afterEach(() => vi.restoreAllMocks())
+
+/** Makes every write to the store fail as Safari does when the storage is full. */
+function failWritesTo(store: string) {
+  const put = IDBObjectStore.prototype.put
+  vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+    if (this.name === store) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+    return put.apply(this, args)
+  })
+}
 
 describe('бібліотека', () => {
   it('додає першою, зберігає індекс і книжку після перезапуску', async () => {
@@ -51,6 +62,41 @@ describe('бібліотека', () => {
     expect(await getValue('translations', `${gone.id}|0-0`)).toBeUndefined()
     expect(await getValue('fragments', `${gone.id}|abc`)).toBeUndefined()
     expect(await getValue('translations', `${kept.id}|0-0`)).toEqual(['c'])
+  })
+
+  it('збій запису індексу: книжки немає ні в списку, ні в базі (R1)', async () => {
+    const kept = await addBook(book('Kept'))
+    failWritesTo('meta')
+    const lost = book('Lost')
+    await expect(addBook(lost)).rejects.toThrow('Не вдалося зберегти книжку: на пристрої недостатньо місця')
+    expect(books.value.map((b) => b.title)).toEqual(['Kept'])
+    vi.restoreAllMocks()
+    expect(await loadBook(lost.id)).toBeNull()
+    await relaunch()
+    expect(books.value.map((b) => b.id)).toEqual([kept.id])
+  })
+
+  it('застарілий список у пам\'яті (інша вкладка) не ховає й не повертає книжки (R1)', async () => {
+    const first = await addBook(book('First'))
+    // Another tab added «Other» and deleted «First»; this tab still shows only «First».
+    const other = book('Other')
+    await setValue('books', other.id, other)
+    await setValue('meta', 'library', [{ ...first, id: other.id, title: 'Other' }])
+    expect(books.value.map((b) => b.title)).toEqual(['First'])
+    await addBook(book('Third'))
+    expect(books.value.map((b) => b.title)).toEqual(['Third', 'Other'])
+    await deleteBook(other.id)
+    await relaunch()
+    expect(books.value.map((b) => b.title)).toEqual(['Third'])
+  })
+
+  it('інші вкладки отримують повідомлення про зміну бібліотеки (R1)', async () => {
+    await initLibrary()
+    const listener = new BroadcastChannel(`${DB_NAME}-library`)
+    const heard = new Promise((resolve) => { listener.onmessage = (event) => resolve(event.data) })
+    await addBook(book('Shared'))
+    expect(await heard).toBe('library')
+    listener.close()
   })
 
   it('демо-книжка додається лише один раз', async () => {

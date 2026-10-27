@@ -4,7 +4,7 @@ import { signal } from '@preact/signals'
 import { fixtureSavedWords, fixtureSentence } from '../language.ts'
 import type { WordCard } from '../../contracts.ts'
 import type { ParagraphRef, SentenceRef } from '../model/book.ts'
-import { getValue, setValue } from '../storage/db.ts'
+import { getValue, setValue, storageError, storageErrorText } from '../storage/db.ts'
 
 export interface SavedPlace {
   bookID: string
@@ -96,8 +96,17 @@ export async function initSaved(): Promise<void> {
   quotes.value = Array.isArray(stored?.quotes) ? stored.quotes : []
 }
 
+/**
+ * Writes both lists. On failure the lists are read back from storage, so the screen never shows a word
+ * or quote that was not saved (or hides one that was not removed), and the reason is shown (R7).
+ */
 async function persist() {
-  await setValue('meta', KEY, { words: words.value, quotes: quotes.value })
+  try {
+    await setValue('meta', KEY, { words: words.value, quotes: quotes.value })
+  } catch (error) {
+    storageError.value = `Не вдалося зберегти: ${storageErrorText(error)}`
+    await initSaved().catch(() => {})
+  }
 }
 
 export function wordFor(lemma: string): SavedWord | undefined {
@@ -199,8 +208,10 @@ export function highlightForms(list: SavedWord[] = words.value): Set<string> {
 }
 
 export function csvField(value: string): string {
-  if (!/[;"\n]/.test(value)) return value
-  return `"${value.replaceAll('"', '""')}"`
+  // A leading = + - @ (or tab, carriage return) runs as a formula in Numbers or Excel; «'» keeps it text (R5, OWASP).
+  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+  if (!/[;"\n]/.test(text)) return text
+  return `"${text.replaceAll('"', '""')}"`
 }
 
 export function wordsCSV(list: SavedWord[]): string {

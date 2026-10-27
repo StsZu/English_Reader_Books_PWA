@@ -16,11 +16,12 @@ export function formatForExtension(ext: string): BookFormat | null {
   }
 }
 
-export async function importBook(data: Uint8Array, format: BookFormat, fallbackTitle: string): Promise<Book> {
+/** `unreadable` receives the EPUB files that could not be read (the book is imported without them). */
+export async function importBook(data: Uint8Array, format: BookFormat, fallbackTitle: string, unreadable?: string[]): Promise<Book> {
   if (data.length > maxFileSize) throw new ImportError({ kind: 'tooLarge' })
   let raw: RawBook
   switch (format) {
-    case 'epub': raw = await parseEPUB(data, fallbackTitle); break
+    case 'epub': raw = await parseEPUB(data, fallbackTitle, unreadable); break
     case 'txt': raw = parsePlainText(decodeText(data), fallbackTitle); break
     case 'md': raw = parseMarkdown(decodeText(data), fallbackTitle); break
   }
@@ -30,7 +31,7 @@ export async function importBook(data: Uint8Array, format: BookFormat, fallbackT
 }
 
 /** Imports a file chosen in the system file picker. */
-export async function importFile(file: File): Promise<Book> {
+export async function importFile(file: File, unreadable?: string[]): Promise<Book> {
   const dot = file.name.lastIndexOf('.')
   const ext = dot < 0 ? '' : file.name.slice(dot + 1).toLowerCase()
   const format = formatForExtension(ext)
@@ -43,5 +44,5 @@ export async function importFile(file: File): Promise<Book> {
     throw new ImportError({ kind: 'unreadable' })
   }
   const fallbackTitle = dot < 0 ? file.name : file.name.slice(0, dot)
-  return importBook(data, format, fallbackTitle)
+  return importBook(data, format, fallbackTitle, unreadable)
 }

@@ -24,12 +24,11 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   if (request.mode === 'navigate') {
     // Network first so a new version arrives on the next launch; the cached shell when offline.
+    // The page from the network is not cached here: it may belong to a newer version whose files are not in
+    // this cache yet. Each version caches its page together with its files at install (R8).
     event.respondWith(
       Promise.race([
-        fetch(request).then((response) => {
-          if (response.ok) caches.open(CACHE).then((cache) => cache.put('./', response.clone()))
-          return response
-        }),
+        fetch(request),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
       ]).catch(() => caches.match('./').then((cached) => cached || Response.error())),
     )

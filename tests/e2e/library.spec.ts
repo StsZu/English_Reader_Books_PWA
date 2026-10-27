@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { brokenEPUB, drmEPUB, garbageEPUB, pdfFile, plainText, storedEPUB, type FilePayload } from '../fixtures/e2e/books.ts'
+import { brokenEPUB, drmEPUB, garbageEPUB, partialEPUB, pdfFile, plainText, storedEPUB, type FilePayload } from '../fixtures/e2e/books.ts'
 import { demoBook } from '../fixtures/language.ts'
 
 test.beforeEach(async ({ page }) => {
@@ -46,6 +46,18 @@ test('імпорт EPUB відкриває книжку, а вона збері�
   await expect(card).toContainText('EPUB')
   // The newest book comes first.
   await expect(page.locator('[data-testid^="book-"]').first()).toHaveAttribute('data-testid', 'book-Test Book')
+})
+
+test('неповний EPUB: попередження з назвою файла, потім книжка відкривається (R2)', async ({ page }) => {
+  await page.goto('./?reset')
+  await importFile(page, partialEPUB())
+  const dialog = page.getByTestId('partialImport')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('Книжку імпортовано не повністю')
+  await expect(dialog).toContainText('Розділів: 1. Не вдалося прочитати файлів: 1 (ch2.xhtml).')
+  await page.getByTestId('partialImportOpen').click()
+  await expect(page.getByTestId('readerScroll')).toBeVisible()
+  await expect(page.locator('[data-p]').first()).toContainText('Chapter 1')
 })
 
 test('імпорт TXT додає книжку з назвою файла', async ({ page }) => {

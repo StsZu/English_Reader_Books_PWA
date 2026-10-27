@@ -8,6 +8,10 @@ const file = (name: string, mimeType: string, data: Uint8Array | string): FilePa
 
 export const storedEPUB = (): FilePayload => file('Test Book.epub', 'application/epub+zip', makeEPUB())
 
+/** An EPUB whose second chapter is listed in the OPF but missing from the archive (R2). */
+export const partialEPUB = (): FilePayload =>
+  file('Partial.epub', 'application/epub+zip', makeEPUB({}, ['OEBPS/text/ch2.xhtml']))
+
 export const drmEPUB = (): FilePayload =>
   file('Locked.epub', 'application/epub+zip', makeEPUB({ 'META-INF/rights.xml': '<rights/>' }))
 

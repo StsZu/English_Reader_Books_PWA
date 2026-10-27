@@ -132,6 +132,32 @@ describe('OpenAI client', () => {
   })
 })
 
+describe('deadline of the whole response (R3)', () => {
+  /** Headers arrive, the body never does. */
+  const stalled = () => ({ ok: true, status: 200, body: null, json: () => new Promise(() => {}), text: () => new Promise(() => {}) }) as unknown as Response
+
+  it('a body that never arrives ends with timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      stubFetch(stalled)
+      const result = kindOf(chatJSON('m', 'system', 'user', (v) => v))
+      await vi.advanceTimersByTimeAsync(60_001)
+      expect(await result).toBe('timeout')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('an abort stops waiting for the body', async () => {
+    stubFetch(stalled)
+    const controller = new AbortController()
+    const result = chatJSON('m', 'system', 'user', (v) => v, controller.signal)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    controller.abort()
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
+
 describe('translation', () => {
   it('sends sentences with the previous paragraph as context (last 600 chars)', async () => {
     stubFetch(() => chat({ translations: ['Один.', 'Два.'] }))

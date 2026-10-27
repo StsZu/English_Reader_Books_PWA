@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WordCard } from '../../src/contracts.ts'
 import {
   CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, highlightForms, initSaved, isSaved, quotes, quotesText,
   removeAllForTests, removeQuote, removeWordByLemma, saveQuote, saveWord, seedForTests, words, wordsCSV, type SavedPlace,
 } from '../../src/core/saved/saved.ts'
 import { fixtureSavedWords } from '../../src/core/language.ts'
-import { closeDB } from '../../src/core/storage/db.ts'
+import { closeDB, storageError } from '../../src/core/storage/db.ts'
 
 const card = (word: string, lemma: string, forms = ''): WordCard => ({
   headword: word, lemma, ipa: 'x', partOfSpeech: 'дієслово', contextTranslation: `переклад ${word}`,
@@ -74,6 +74,26 @@ describe('збережені слова', () => {
   })
 })
 
+describe('помилка запису (R7)', () => {
+  it('слово, яке не збереглося, зникає зі списку, а причина показується', async () => {
+    await saveWord(card('kept', 'kept'), 'Kept.', place('b'))
+    const put = IDBObjectStore.prototype.put
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+      if (this.name === 'meta') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+      return put.apply(this, args)
+    })
+    try {
+      await saveWord(card('lost', 'lost'), 'Lost.', place('b'))
+      await removeWordByLemma('kept')
+    } finally {
+      spy.mockRestore()
+    }
+    expect(words.value.map((w) => w.lemma)).toEqual(['kept'])
+    expect(storageError.value).toBe('Не вдалося зберегти: на пристрої недостатньо місця для даних застосунку.')
+    storageError.value = null
+  })
+})
+
 describe('цитати й експорт', () => {
   // testSavedQuotesAreUniqueAndExportEscapes
   it('цитати без дублікатів, CSV з екрануванням', async () => {
@@ -85,6 +105,10 @@ describe('цитати й експорт', () => {
     expect(filterQuotes(crypto.randomUUID(), '').length).toBe(0)
     expect(csvField('a;b "c"')).toBe('"a;b ""c"""')
     expect(csvField('plain')).toBe('plain')
+    // R5: a leading = + - @ would run as a formula in a spreadsheet.
+    expect(['=1+1', '+7', '-2', '@SUM(A1)', '\tx'].map(csvField)).toEqual(["'=1+1", "'+7", "'-2", "'@SUM(A1)", "'\tx"])
+    expect(csvField('=a;b')).toBe(`"'=a;b"`)
+    expect(csvField('a-b = c')).toBe('a-b = c')
     await saveWord(card('say', 'say'), 'He said; "no".', place(book))
     const csv = wordsCSV(words.value)
     expect(csv.startsWith('слово;lemma;IPA;переклад;рівень;форми;контекст\n')).toBe(true)

@@ -7,7 +7,7 @@ import { isContentEncrypted, resolveHref } from '../../src/core/import/epub.ts'
 import { htmlBlocks } from '../../src/core/import/html.ts'
 import { formatForExtension, importBook, importFile, maxFileSize } from '../../src/core/import/importer.ts'
 import { decodeText, parseMarkdown, parsePlainText } from '../../src/core/import/text.ts'
-import { ZipArchive } from '../../src/core/import/zip.ts'
+import { ZipArchive, ZipError } from '../../src/core/import/zip.ts'
 import { demoBook } from '../fixtures/language.ts'
 import { makeEPUB, zipArchive } from '../fixtures/zip-writer.ts'
 
@@ -196,5 +196,36 @@ describe('BookImporter', () => {
     expect(book.title).toBe('My Story')
     expect(book.format).toBe('txt')
     expect(book.chapters[0].paragraphs[0].sentences).toEqual(['Hello there.', 'General Kenobi.'])
+  })
+})
+
+describe('неповний або завеликий EPUB (R2, R4)', () => {
+  it('файл зі spine, якого немає в архіві: книжка без нього й назва файла у звіті', async () => {
+    const unreadable: string[] = []
+    const book = await importBook(makeEPUB({}, ['OEBPS/text/ch2.xhtml']), 'epub', 'x', unreadable)
+    expect(book.chapters.map((c) => c.title)).toEqual(['Chapter 1'])
+    expect(unreadable).toEqual(['ch2.xhtml'])
+    const complete: string[] = []
+    await importBook(makeEPUB(), 'epub', 'x', complete)
+    expect(complete).toEqual([])
+  })
+
+  it('запис, що розгортається понад заявлений розмір, не розпаковується до кінця', async () => {
+    const big = 'x'.repeat(100_000)
+    const zip = new ZipArchive(zipArchive([['a.txt', big, true, 1000]]))
+    await expect(zip.read('a.txt')).rejects.toMatchObject({ reason: 'corrupted' })
+  })
+
+  it('архів понад бюджет розпакування — зрозуміла помилка ще до розпакування', async () => {
+    const zip = new ZipArchive(zipArchive([['a.txt', 'abc', true], ['b.txt', 'x'.repeat(2000), true]]), 1000)
+    expect(await zip.readText('a.txt')).toBe('abc')
+    await expect(zip.read('b.txt')).rejects.toBeInstanceOf(ZipError)
+    await expect(zip.read('b.txt')).rejects.toMatchObject({ reason: 'tooLarge' })
+    const huge = zipArchive([
+      ['META-INF/container.xml', '<container><rootfiles><rootfile full-path="c.opf"/></rootfiles></container>', false],
+      ['c.opf', '<package><metadata/><manifest><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/></spine></package>', false],
+      ['a.xhtml', '<p>Text.</p>', true, 300 * 1024 * 1024],
+    ])
+    await expect(importBook(huge, 'epub', 'x')).rejects.toMatchObject({ error: { kind: 'tooLargeUnpacked' } })
   })
 })

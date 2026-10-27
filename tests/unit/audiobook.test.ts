@@ -3,7 +3,8 @@ import { File as NodeFile } from 'node:buffer'
 import { describe, expect, it, vi } from 'vitest'
 import { AudiobookPlayer, LONG_PAUSE_MS, type MediaElement } from '../../src/core/audiobook/player.ts'
 import {
-  addTracks, closeAudioDB, compareNames, deleteAudio, isAudioFile, listTracks, loadAudioPosition, trackFile,
+  addTracks, closeAudioDB, compareNames, deleteAudio, isAudioFile, listTracks, loadAudioPosition, removeOrphanAudio,
+  saveAudioPosition, setTracks, trackFile,
 } from '../../src/core/audiobook/store.ts'
 
 // Node's File survives fake-indexeddb's structured clone (happy-dom's does not), like a real Blob in Safari.
@@ -96,6 +97,42 @@ describe('audiobook store', () => {
     await deleteAudio(bookID)
     expect(await listTracks(bookID)).toEqual([])
     expect(await trackFile(track.id)).toBeNull()
+  })
+
+  it('a failed write leaves no files behind (R6)', async () => {
+    const bookID = `book-${crypto.randomUUID()}`
+    const put = IDBObjectStore.prototype.put
+    let files = 0
+    const written: string[] = []
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+      if (this.name === 'files' && ++files === 2) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+      if (this.name === 'files') written.push(String(args[1]))
+      return put.apply(this, args)
+    })
+    try {
+      await expect(addTracks(bookID, [file('1.mp3'), file('2.mp3')])).rejects.toThrow('quota')
+    } finally {
+      spy.mockRestore()
+    }
+    expect(written).toHaveLength(1)
+    expect(await trackFile(written[0])).toBeNull()
+    expect(await listTracks(bookID)).toEqual([])
+  })
+
+  it('removes the audio of deleted books and files without a track at start (R6)', async () => {
+    const kept = `book-${crypto.randomUUID()}`
+    const gone = `book-${crypto.randomUUID()}`
+    const [keptTrack, orphan] = await addTracks(kept, [file('1.mp3'), file('2.mp3')])
+    await setTracks(kept, [keptTrack])
+    const [goneTrack] = await addTracks(gone, [file('g.mp3')])
+    await saveAudioPosition(gone, { track: 0, time: 5 })
+    await removeOrphanAudio([kept])
+    expect((await listTracks(kept)).map((t) => t.id)).toEqual([keptTrack.id])
+    expect(await trackFile(keptTrack.id)).not.toBeNull()
+    expect(await trackFile(orphan.id)).toBeNull()
+    expect(await listTracks(gone)).toEqual([])
+    expect(await trackFile(goneTrack.id)).toBeNull()
+    expect(await loadAudioPosition(gone)).toBeNull()
   })
 })
 

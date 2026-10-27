@@ -67,14 +67,20 @@ export async function addTracks(bookID: string, files: File[], current?: AudioTr
   const audio = files.filter(isAudioFile).sort((a, b) => compareNames(a.name, b.name))
   const database = await db()
   const added: AudioTrack[] = []
-  for (const file of audio) {
-    const track: AudioTrack = { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, duration: null }
-    await putFile(database, track.id, file)
-    added.push(track)
+  try {
+    for (const file of audio) {
+      const track: AudioTrack = { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, duration: null }
+      await putFile(database, track.id, file)
+      added.push(track)
+    }
+    const tracks = [...(current ?? await listTracks(bookID)), ...added]
+    await setTracks(bookID, tracks)
+    return tracks
+  } catch (error) {
+    // Files written before the failure belong to no track: remove them so they take no space (R6).
+    for (const track of added) await database.delete('files', track.id).catch(() => {})
+    throw error
   }
-  const tracks = [...(current ?? await listTracks(bookID)), ...added]
-  await setTracks(bookID, tracks)
-  return tracks
 }
 
 interface StoredBytes {
@@ -108,6 +114,27 @@ export async function deleteAudio(bookID: string): Promise<void> {
   for (const track of await listTracks(bookID)) await database.delete('files', track.id)
   await database.delete('tracks', bookID)
   await database.delete('positions', bookID)
+}
+
+/**
+ * Removes audio that a failed write left behind (R6): the audio of books that are no longer in the library
+ * and files that no track refers to. Called once at start, before anything adds audio.
+ */
+export async function removeOrphanAudio(bookIDs: string[]): Promise<void> {
+  const database = await db()
+  const books = new Set(bookIDs)
+  const referenced = new Set<string>()
+  for (const key of await database.getAllKeys('tracks')) {
+    const bookID = String(key)
+    if (books.has(bookID)) for (const track of await listTracks(bookID)) referenced.add(track.id)
+    else await deleteAudio(bookID)
+  }
+  for (const key of await database.getAllKeys('positions')) {
+    if (!books.has(String(key))) await database.delete('positions', key)
+  }
+  for (const key of await database.getAllKeys('files')) {
+    if (!referenced.has(String(key))) await database.delete('files', key)
+  }
 }
 
 export async function loadAudioPosition(bookID: string): Promise<AudioPosition | null> {

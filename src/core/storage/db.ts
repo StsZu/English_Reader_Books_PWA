@@ -1,6 +1,7 @@
 // IndexedDB schema (spec.md → «Схема даних»). One database, plain key–value object stores,
 // so every module persists the same JSON shapes the Swift app wrote to Application Support.
-import { openDB, type IDBPDatabase } from 'idb'
+import { signal } from '@preact/signals'
+import { openDB, type IDBPDatabase, type IDBPTransaction } from 'idb'
 import { databaseName } from '../language.ts'
 import type { KeyValueCache } from '../../contracts.ts'
 
@@ -38,6 +39,38 @@ export async function closeDB() {
   if (dbPromise) (await dbPromise).close()
   dbPromise = null
 }
+
+/**
+ * Runs `work` in one read-write transaction over `stores`: either every write is committed or none is.
+ * `work` may await only requests of this transaction.
+ */
+export async function transact<T>(stores: StoreName[], work: (tx: IDBPTransaction<unknown, StoreName[], 'readwrite'>) => Promise<T>): Promise<T> {
+  const tx = (await db()).transaction(stores, 'readwrite')
+  try {
+    const result = await work(tx)
+    await tx.done
+    return result
+  } catch (error) {
+    tx.done.catch(() => {})
+    try {
+      tx.abort()
+    } catch {
+      // Already finished or aborted by the failed request.
+    }
+    throw error
+  }
+}
+
+export const isQuotaError = (error: unknown): boolean => (error as { name?: string } | null)?.name === 'QuotaExceededError'
+
+/** Ukrainian reason of a failed write. */
+export function storageErrorText(error: unknown): string {
+  if (isQuotaError(error)) return 'на пристрої недостатньо місця для даних застосунку.'
+  return error instanceof Error && error.message ? error.message : String(error)
+}
+
+/** A write the user did not see fail otherwise (saved words, quotes, reading place); shown by App. */
+export const storageError = signal<string | null>(null)
 
 export async function getValue<T>(store: StoreName, key: string): Promise<T | undefined> {
   return (await db()).get(store, key) as Promise<T | undefined>

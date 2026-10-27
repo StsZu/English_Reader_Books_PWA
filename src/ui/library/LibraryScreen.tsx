@@ -19,6 +19,9 @@ export function LibraryScreen() {
   const [importing, setImporting] = useState(false)
   const [showSaved, setShowSaved] = useState(false)
   const [bookToDelete, setBookToDelete] = useState<BookSummary | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  /** A book imported without some EPUB files (R2): opened after the reader has seen the warning. */
+  const [partial, setPartial] = useState<{ id: string; chapters: number; unreadable: string[] } | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const list = books.value
 
@@ -29,8 +32,10 @@ export function LibraryScreen() {
     if (!file) return
     setImporting(true)
     try {
-      const summary = await addBook(await importFile(file))
-      openBook(summary.id)
+      const unreadable: string[] = []
+      const summary = await addBook(await importFile(file, unreadable))
+      if (unreadable.length > 0) setPartial({ id: summary.id, chapters: summary.chapterCount, unreadable })
+      else openBook(summary.id)
     } catch (error) {
       lastError.value = errorMessage(error)
     } finally {
@@ -93,11 +98,33 @@ export function LibraryScreen() {
         style="actionSheet"
         title={`Видалити книжку «${bookToDelete?.title ?? ''}»?`}
         actions={[
-          { label: 'Видалити', role: 'destructive', testID: 'confirmDelete', onSelect: () => { if (bookToDelete) void deleteBook(bookToDelete.id) } },
+          {
+            label: 'Видалити', role: 'destructive', testID: 'confirmDelete',
+            onSelect: () => { if (bookToDelete) deleteBook(bookToDelete.id).catch((error) => setDeleteError(errorMessage(error))) },
+          },
           { label: 'Скасувати', role: 'cancel' },
         ]}
         onClose={() => setBookToDelete(null)}
         testID="deleteDialog"
+      />
+      <ConfirmDialog
+        open={deleteError !== null}
+        title="Не вдалося видалити"
+        message={deleteError ?? ''}
+        actions={[{ label: 'Гаразд', role: 'cancel' }]}
+        onClose={() => setDeleteError(null)}
+        testID="deleteError"
+      />
+      <ConfirmDialog
+        open={partial !== null}
+        title="Книжку імпортовано не повністю"
+        message={partial && `Розділів: ${partial.chapters}. Не вдалося прочитати файлів: ${partial.unreadable.length} (${partial.unreadable.join(', ')}). Можливо, EPUB пошкоджений.`}
+        actions={[{ label: 'Відкрити', role: 'cancel', testID: 'partialImportOpen' }]}
+        onClose={() => {
+          if (partial) openBook(partial.id)
+          setPartial(null)
+        }}
+        testID="partialImport"
       />
       <FormSheet open={showSaved} onClose={() => setShowSaved(false)} title="Збережене" ariaLabel="Збережене"
         doneTestID="savedDone" testID="savedSheet" width={700} height={820}>

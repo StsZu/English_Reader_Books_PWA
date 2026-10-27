@@ -37,7 +37,11 @@ export function mapError(status: number, body: string): AIServiceError {
   return { kind: 'http', status, message: (error?.message ?? '').slice(0, 160) }
 }
 
-async function post(path: string, json: unknown, timeoutMs: number, signal?: AbortSignal): Promise<Response> {
+/**
+ * POST with one deadline for the whole exchange (R3): headers, body and `read` of the body. A body that
+ * stops arriving ends with `timeout`, and an abort stops the read even if the body itself ignores it.
+ */
+async function post<T>(path: string, json: unknown, timeoutMs: number, read: (response: Response) => Promise<T>, signal?: AbortSignal): Promise<T> {
   const key = await apiKey()
   if (signal?.aborted) throw abortError()
   const controller = new AbortController()
@@ -65,8 +69,21 @@ async function post(path: string, json: unknown, timeoutMs: number, signal?: Abo
       }
       throw new AIError({ kind: 'http', status: -1, message: error instanceof Error ? error.message : String(error) })
     }
-    if (!response.ok) throw new AIError(mapError(response.status, await response.text().catch(() => '')))
-    return response
+    const aborted = new Promise<never>((_, reject) => {
+      const stop = () => {
+        response.body?.cancel().catch(() => {})
+        reject(abortError())
+      }
+      if (controller.signal.aborted) stop()
+      else controller.signal.addEventListener('abort', stop, { once: true })
+    })
+    aborted.catch(() => {})
+    if (!response.ok) throw new AIError(mapError(response.status, await Promise.race([response.text().catch(() => ''), aborted])))
+    return await Promise.race([read(response), aborted])
+  } catch (error) {
+    if (timedOut) throw new AIError({ kind: 'timeout' })
+    if (signal?.aborted) throw abortError()
+    throw error
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', onAbort)
@@ -97,13 +114,13 @@ export async function chatJSON<T>(
     ],
   }
   if (model.startsWith('gpt-5') || model.startsWith('o')) body.reasoning_effort = 'low'
-  const response = await post('chat/completions', body, 60_000, signal)
-  let parsed: ChatResponse
-  try {
-    parsed = await response.json()
-  } catch {
-    throw new AIError({ kind: 'badResponse', detail: 'немає choices' })
-  }
+  const parsed = await post('chat/completions', body, 60_000, async (response): Promise<ChatResponse> => {
+    try {
+      return await response.json()
+    } catch {
+      throw new AIError({ kind: 'badResponse', detail: 'немає choices' })
+    }
+  }, signal)
   const choice = parsed.choices?.[0]
   if (!choice) throw new AIError({ kind: 'badResponse', detail: 'немає choices' })
   if (choice.finish_reason === 'length') throw new AIError({ kind: 'badResponse', detail: 'відповідь обрізана' })
@@ -124,34 +141,10 @@ export const SPEECH_TIMEOUT_MS = 60_000
 
 /** Text-to-speech; returns MP3 bytes. */
 export async function speech(model: string, voice: string, input: string, instructions: string, signal?: AbortSignal): Promise<ArrayBuffer> {
-  // The audio arrives as a stream: the time limit covers the body too, not only the headers.
-  const controller = new AbortController()
-  let timedOut = false
-  const timer = setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, SPEECH_TIMEOUT_MS)
-  const onAbort = () => controller.abort()
-  signal?.addEventListener('abort', onAbort)
-  try {
-    const response = await post('audio/speech', { model, voice, input, instructions, response_format: 'mp3' }, SPEECH_TIMEOUT_MS, controller.signal)
-    // post() no longer forwards the abort once the headers arrived, so the body read races it.
-    const aborted = new Promise<never>((_, reject) => {
-      if (controller.signal.aborted) reject(abortError())
-      controller.signal.addEventListener('abort', () => {
-        response.body?.cancel().catch(() => {})
-        reject(abortError())
-      }, { once: true })
-    })
-    const data = await Promise.race([response.arrayBuffer(), aborted])
+  // The audio arrives as a stream: the time limit of post() covers the body too, not only the headers.
+  return post('audio/speech', { model, voice, input, instructions, response_format: 'mp3' }, SPEECH_TIMEOUT_MS, async (response) => {
+    const data = await response.arrayBuffer()
     if (data.byteLength <= 512) throw new AIError({ kind: 'badResponse', detail: 'порожнє аудіо' })
     return data
-  } catch (error) {
-    if (timedOut) throw new AIError({ kind: 'timeout' })
-    if (signal?.aborted) throw abortError()
-    throw error
-  } finally {
-    clearTimeout(timer)
-    signal?.removeEventListener('abort', onAbort)
-  }
+  }, signal)
 }
