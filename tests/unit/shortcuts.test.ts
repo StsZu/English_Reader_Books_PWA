@@ -8,7 +8,8 @@ function fakeModel(audio: boolean) {
   const calls: string[] = []
   const model = {
     audioMode: audio,
-    activeSentence: signal(null),
+    activeSentence: signal<unknown>(null),
+    wordCursor: signal<number | null>(null),
     audiobook: {
       hasAudio: audio,
       track: signal(0),
@@ -19,6 +20,9 @@ function fakeModel(audio: boolean) {
     stepRate: (d: number) => calls.push(`rate ${d}`),
     switchBarMode: () => calls.push('mode'),
     speakActiveSentence: () => calls.push('speak'),
+    moveSentence: (d: number) => calls.push(`sentence ${d}`),
+    moveWord: (d: number) => calls.push(`word ${d}`),
+    lookUpCursorWord: () => calls.push('card'),
   }
   return { model: model as unknown as ReaderModel, calls }
 }
@@ -39,7 +43,7 @@ describe('reader shortcuts', () => {
     expect(calls).toEqual(['toggle', 'skip -5', 'skip 30', 'track 1', 'track -1', 'rate -1', 'rate 1', 'mode'])
   })
 
-  it('in voice mode only Space acts; arrows keep scrolling the text', () => {
+  it('in voice mode ← / → and the audiobook keys keep scrolling the text', () => {
     const { model } = fakeModel(false)
     expect(readerShortcut(key('Space'), model, () => {})).not.toBeNull()
     for (const code of ['ArrowLeft', 'ArrowRight', 'Period', 'BracketRight', 'KeyA', 'Enter']) {
@@ -70,5 +74,35 @@ describe('reader shortcuts', () => {
     readerShortcut(key('Slash', { shiftKey: true }), model, () => { help++ })?.()
     expect(readerShortcut(key('Slash'), model, () => { help++ })).toBeNull()
     expect(help).toBe(1)
+  })
+
+  it('↑ / ↓ choose sentences in both modes, except on a slider; Option + ← / → move the word cursor of a chosen sentence', () => {
+    for (const audio of [false, true]) {
+      const { model, calls } = fakeModel(audio)
+      readerShortcut(key('ArrowUp'), model, () => {})?.()
+      readerShortcut(key('ArrowDown'), model, () => {})?.()
+      expect(readerShortcut(key('ArrowLeft', { altKey: true }), model, () => {})).toBeNull()
+      ;(model.activeSentence as unknown as { value: unknown }).value = { paragraph: { chapter: 0, paragraph: 0 }, sentence: 0 }
+      readerShortcut(key('ArrowRight', { altKey: true }), model, () => {})?.()
+      readerShortcut(key('ArrowLeft', { altKey: true }), model, () => {})?.()
+      expect(calls).toEqual(['sentence -1', 'sentence 1', 'word 1', 'word -1'])
+      const slider = document.createElement('div')
+      slider.setAttribute('role', 'slider')
+      expect(readerShortcut(key('ArrowDown', {}, slider), model, () => {})).toBeNull()
+      expect(readerShortcut(key('KeyA', { altKey: true }), model, () => {})).toBeNull()
+    }
+  })
+
+  it('Enter opens the card of the word under the cursor; Esc removes the cursor', () => {
+    const { model, calls } = fakeModel(false)
+    expect(readerShortcut(key('Escape'), model, () => {})).toBeNull()
+    ;(model.activeSentence as unknown as { value: unknown }).value = { paragraph: { chapter: 0, paragraph: 0 }, sentence: 0 }
+    model.wordCursor.value = 1
+    readerShortcut(key('Enter'), model, () => {})?.()
+    expect(calls).toEqual(['card'])
+    readerShortcut(key('Escape'), model, () => {})?.()
+    expect(model.wordCursor.value).toBeNull()
+    readerShortcut(key('Enter'), model, () => {})?.()
+    expect(calls).toEqual(['card', 'speak'])
   })
 })

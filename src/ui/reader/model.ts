@@ -84,6 +84,10 @@ export class ReaderModel {
   readonly wordLookup = signal<WordLookup | null>(null)
   readonly pronunciationNotice = signal<string | null>(null)
   readonly activeSentence = signal<SentenceRef | null>(null)
+  /** Word of the active sentence chosen with Option + ← / → (specs/008, A3). */
+  readonly wordCursor = signal<number | null>(null)
+  /** Bumped when the view should scroll the active sentence into view (a sentence chosen with ↑ / ↓). */
+  readonly revealRequest = signal(0)
   /** Short playback of one selected sentence or fragment (long press, «Ще раз», «Прослухати»). */
   readonly sentenceSpeech = signal<SentenceSpeech | null>(null)
   readonly sentenceSpeechNotice = signal<string | null>(null)
@@ -212,6 +216,54 @@ export class ReaderModel {
     if (active) this.speakSentence(active, false)
   }
 
+  // MARK: Choosing from the keyboard (specs/008-phone-accessibility, A3)
+
+  /** ↑ / ↓: the previous or next sentence of the chapter, as a first tap; without one — the top paragraph. */
+  moveSentence(direction: -1 | 1) {
+    const chapter = this.chapter.value
+    const paragraphs = this.currentChapter.paragraphs
+    const active = this.activeSentence.value
+    let next: SentenceRef
+    if (!active || active.paragraph.chapter !== chapter) {
+      next = { paragraph: { chapter, paragraph: this.topParagraph.value }, sentence: 0 }
+    } else {
+      let paragraph = active.paragraph.paragraph
+      let sentence = active.sentence + direction
+      while (sentence < 0 || sentence >= paragraphs[paragraph].sentences.length) {
+        paragraph += direction
+        if (paragraph < 0 || paragraph >= paragraphs.length) return
+        sentence = direction > 0 ? 0 : paragraphs[paragraph].sentences.length - 1
+      }
+      next = { paragraph: { chapter, paragraph }, sentence }
+    }
+    if (!this.isValid(next)) return
+    if (this.selection.value) this.clearSelection()
+    this.select(next)
+    this.revealRequest.value++
+  }
+
+  /** Option + ← / →: the word cursor inside the active sentence. */
+  moveWord(direction: -1 | 1) {
+    const active = this.activeSentence.value
+    if (!active || !this.isValid(active)) return
+    const count = this.wordRanges(this.text(active)).length
+    if (count === 0) return
+    const current = this.wordCursor.value
+    this.wordCursor.value = current === null
+      ? (direction > 0 ? 0 : count - 1)
+      : Math.min(count - 1, Math.max(0, current + direction))
+  }
+
+  /** Enter with the word cursor: the word card, as a second tap. */
+  lookUpCursorWord() {
+    const active = this.activeSentence.value
+    const index = this.wordCursor.value
+    if (!active || index === null || !this.isValid(active)) return
+    const text = this.text(active)
+    const range = this.wordRanges(text)[index]
+    if (range) this.lookUp(text.slice(range.start, range.end), text, active)
+  }
+
   private positionErrorShown = false
 
   savePosition() {
@@ -248,6 +300,7 @@ export class ReaderModel {
   private setActive(ref: SentenceRef | null) {
     if (sameSentence(this.activeSentence.value, ref) || (!ref && !this.activeSentence.value)) return
     this.activeSentence.value = ref
+    this.wordCursor.value = null
     this.reading.choose(ref)
     this.stopSentenceSpeech()
     this.sentenceSpeechNotice.value = null

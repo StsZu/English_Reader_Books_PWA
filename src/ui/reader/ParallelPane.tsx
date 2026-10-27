@@ -171,7 +171,7 @@ export function ParallelPane({ model, openSettings }: { model: ReaderModel; open
   return (
     <section class="parallel-pane" data-testid="parallelTranslationPane" data-testvalue={fixture}
       style={{ height: `${paneHeight()}px`, fontSize: `${parallelTranslationFontSize.value}px` }}>
-      <div class="pane-row">{content}</div>
+      <div class="pane-row" aria-live="polite">{content}</div>
     </section>
   )
 }

@@ -178,9 +178,9 @@
   background: transparent;
 }
 
+/* Equal sides keep the title centered; a side never shrinks below its buttons, the title does (specs/008, A1). */
 .navbar-row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
   min-height: var(--nav-height);
   gap: 8px;
@@ -188,9 +188,10 @@
 
 .navbar-side {
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   gap: 4px;
-  min-width: 0;
+  min-width: max-content;
 }
 
 .navbar-trailing {
@@ -204,6 +205,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 46vw;
 }
 
@@ -220,14 +223,21 @@
   align-items: center;
   gap: 0;
   height: var(--hit);
+  min-width: var(--hit);
   padding: 0 8px 0 0;
   margin-left: -6px;
   color: var(--accent);
   font-size: var(--text-body);
+  white-space: nowrap;
 }
 
 .navbar-back:active {
   opacity: 0.4;
+}
+
+/* A narrow window keeps only the chevron, as iOS does; the label stays for VoiceOver. */
+@media (max-width: 599px) {
+  .navbar-back span { display: none; }
 }
 
 .navbar-text-btn {

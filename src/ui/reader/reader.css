@@ -74,6 +74,11 @@
   background: var(--reader-highlight);
 }
 
+.para .w.cursor {
+  text-decoration: underline 2px;
+  text-underline-offset: 0.18em;
+}
+
 .para .sel {
   background: var(--reader-selection);
   -webkit-box-decoration-break: clone;

@@ -3,6 +3,7 @@
 import { memo } from 'preact/compat'
 import type { Paragraph as ParagraphData } from '../../core/model/book.ts'
 import type { WordRange } from '../../core/model/segmenter.ts'
+import { sourceLanguage } from '../../core/language.ts'
 
 export interface ParagraphProps {
   index: number
@@ -12,6 +13,8 @@ export interface ParagraphProps {
   highlighted: readonly number[]
   /** Selected fragment inside this paragraph as [sentence, word] bounds. */
   selection: { lower: [number, number]; upper: [number, number] } | null
+  /** Word chosen from the keyboard (specs/008, A3). */
+  wordCursor: { sentence: number; word: number } | null
   savedForms: ReadonlySet<string>
 }
 
@@ -19,10 +22,11 @@ const inRange = (s: number, w: number, sel: ParagraphProps['selection']) =>
   !!sel && (s > sel.lower[0] || (s === sel.lower[0] && w >= sel.lower[1]))
     && (s < sel.upper[0] || (s === sel.upper[0] && w <= sel.upper[1]))
 
-function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, savedForms }: ParagraphProps) {
+function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, wordCursor, savedForms }: ParagraphProps) {
   const heading = paragraph.kind === 'heading'
   return (
-    <p class={heading ? 'para heading' : 'para text'} data-p={index} data-testid={`paragraph-${index}`}>
+    <p class={heading ? 'para heading' : 'para text'} data-p={index} data-testid={`paragraph-${index}`} lang={sourceLanguage}
+      role={heading ? 'heading' : undefined} aria-level={heading ? 2 : undefined}>
       {paragraph.sentences.map((sentence, s) => {
         const ranges = wordRanges(sentence)
         const pieces = []
@@ -36,6 +40,7 @@ function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, s
           let cls = 'w'
           if (inRange(s, w, selection)) cls += ' sel'
           if (savedForms.size > 0 && savedForms.has(word.toLowerCase())) cls += ' saved'
+          if (wordCursor && wordCursor.sentence === s && wordCursor.word === w) cls += ' cursor'
           pieces.push(<span class={cls} data-w={w}>{word}</span>)
           cursor = range.end
         })
@@ -61,4 +66,5 @@ function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, s
 export const Paragraph = memo(ParagraphView, (a, b) =>
   a.paragraph === b.paragraph && a.index === b.index && a.savedForms === b.savedForms
   && a.highlighted.join() === b.highlighted.join()
-  && JSON.stringify(a.selection) === JSON.stringify(b.selection))
+  && JSON.stringify(a.selection) === JSON.stringify(b.selection)
+  && a.wordCursor?.sentence === b.wordCursor?.sentence && a.wordCursor?.word === b.wordCursor?.word)

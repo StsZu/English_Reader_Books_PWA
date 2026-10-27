@@ -8,6 +8,7 @@ import { highlightForms, words as savedWords } from '../../core/saved/saved.ts'
 import { sameParagraph, type Book } from '../../core/model/book.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
 import { aiServicesOpen, openLibrary } from '../../app/router.ts'
+import { sourceLanguage } from '../../core/language.ts'
 import { fontInfo, lineHeight } from '../theme/fonts.ts'
 import { ReaderPanel } from './panel/ReaderPanel.tsx'
 import { WordCard } from '../word/WordCard.tsx'
@@ -65,6 +66,7 @@ function Reader({ model }: { model: ReaderModel }) {
   const spacing = fontSize * settings.lineSpacingFactor.value
   const bookLineHeight = lineHeight(fontName, fontSize) + spacing
   const active = model.activeSentence.value
+  const wordCursor = model.wordCursor.value
   const current = model.reading.current.value
   const selection = model.selection.value
   const showTranslation = settings.showTranslation.value
@@ -179,6 +181,20 @@ function Reader({ model }: { model: ReaderModel }) {
     scrollToParagraph(model.topParagraph.value)
   }, [chapterIndex, scrollRequest])
 
+  // A sentence chosen from the keyboard scrolls into view without counting as the reader's own scroll (A3).
+  const revealRequest = model.revealRequest.value
+  useLayoutEffect(() => {
+    const ref = model.activeSentence.peek()
+    if (!revealRequest || !ref) return
+    const target = paragraphElement(ref.paragraph.paragraph)?.querySelector<HTMLElement>(`[data-s="${ref.sentence}"]`)
+    if (!target) return
+    const s = scroll.current
+    s.programmatic = true
+    s.user = false
+    target.scrollIntoView({ block: 'nearest' })
+    settleLater()
+  }, [revealRequest])
+
   // After layout changes keep the reader on the same paragraph.
   const typography = `${fontName}|${fontSize}|${settings.lineSpacingFactor.value}|${settings.sideMargin.value}|${settings.firstLineIndent.value}|${settings.paragraphSpacingFactor.value}|${settings.justifyText.value}|${showTranslation}|${settings.parallelTranslationMultiline.value}|${settings.parallelTranslationScale.value}`
   const firstLayout = useRef(true)
@@ -256,7 +272,8 @@ function Reader({ model }: { model: ReaderModel }) {
     '--heading-line': `${lineHeight(fontName, fontSize * 1.35) + fontSize * 1.35 * settings.lineSpacingFactor.value}px`,
     '--indent': `${settings.firstLineIndent.value}em`,
     '--para-gap': `${fontSize * settings.paragraphSpacingFactor.value}px`,
-    '--side': `${settings.sideMargin.value}px`,
+    // The margin from settings is an upper bound: a narrow window keeps at least 14 font sizes of text per line (specs/008, A2).
+    '--side': `min(${settings.sideMargin.value}px, max(0px, (100% - ${fontSize * 14}px) / 2))`,
     '--align': settings.justifyText.value ? 'justify' : 'left',
   } as Record<string, string>
 
@@ -264,7 +281,7 @@ function Reader({ model }: { model: ReaderModel }) {
   const lookup = model.wordLookup.value
   return (
     <div class="reader" data-testid="reader">
-      <NavBar tone="reader" onBack={leave} backLabel="Мої книжки" title={chapter.title}
+      <NavBar tone="reader" onBack={leave} backLabel="Мої книжки" title={<span lang={sourceLanguage}>{chapter.title}</span>}
         trailing={
           <>
             <IconButton icon="list.bullet" label="Зміст" onClick={() => openPanel('contents')} testID="contentsButton" />
@@ -286,13 +303,14 @@ function Reader({ model }: { model: ReaderModel }) {
             const highlighted: number[] = []
             if (active && sameParagraph(active.paragraph, ref)) highlighted.push(active.sentence)
             if (current && sameParagraph(current.paragraph, ref) && !highlighted.includes(current.sentence)) highlighted.push(current.sentence)
+            const cursorWord = active && wordCursor !== null && sameParagraph(active.paragraph, ref) ? { sentence: active.sentence, word: wordCursor } : null
             const sel = selection && sameParagraph(selection.paragraph, ref)
               ? { lower: [selection.lower.sentence, selection.lower.word] as [number, number], upper: [selection.upper.sentence, selection.upper.word] as [number, number] }
               : null
             return (
               <Paragraph key={`${chapterIndex}-${index}`} index={index} paragraph={paragraph}
                 wordRanges={(s) => model.wordRanges(s)}
-                highlighted={highlighted.length ? highlighted : EMPTY} selection={sel} savedForms={savedForms} />
+                highlighted={highlighted.length ? highlighted : EMPTY} selection={sel} wordCursor={cursorWord} savedForms={savedForms} />
             )
           })}
           <ChapterNav model={model} />

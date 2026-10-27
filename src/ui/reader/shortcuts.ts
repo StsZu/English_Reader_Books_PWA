@@ -14,9 +14,11 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: '[ / ]', action: 'Аудіокнига: повільніше / швидше' },
   { keys: ', / .', action: 'Аудіокнига: попередня / наступна доріжка' },
   { keys: 'A', action: 'Перемкнути «Аудіокнига» ↔ «Голос»' },
-  { keys: 'Enter', action: 'Прослухати вибране речення' },
+  { keys: '↑ / ↓', action: 'Попереднє / наступне речення' },
+  { keys: 'Option + ← / →', action: 'Попереднє / наступне слово речення' },
+  { keys: 'Enter', action: 'Картка вибраного слова; без слова — прослухати речення' },
   { keys: '?', action: 'Цей список' },
-  { keys: 'Esc', action: 'Закрити аркуш, меню чи панель' },
+  { keys: 'Esc', action: 'Закрити аркуш, меню чи панель; прибрати вибір слова' },
 ]
 
 const isTextInput = (target: EventTarget | null) =>
@@ -28,13 +30,24 @@ const overlayOpen = () => !!document.querySelector('[aria-modal="true"], [role="
 
 /** The action for a key press in the reader, or null when the key is not a shortcut here. */
 export function readerShortcut(event: KeyboardEvent, model: ReaderModel, showHelp: () => void): (() => void) | null {
-  if (event.metaKey || event.ctrlKey || event.altKey || isTextInput(event.target) || overlayOpen()) return null
+  if (event.metaKey || event.ctrlKey || isTextInput(event.target) || overlayOpen()) return null
   const target = event.target instanceof HTMLElement ? event.target : null
+  const arrow = event.code === 'ArrowLeft' || event.code === 'ArrowRight'
+  if (event.altKey) {
+    // Option + ← / →: the word cursor (specs/008-phone-accessibility, A3); other Option combinations stay with the system.
+    if (!arrow || event.shiftKey || !model.activeSentence.value) return null
+    return () => model.moveWord(event.code === 'ArrowLeft' ? -1 : 1)
+  }
   const audio = model.audioMode
   const player = model.audiobook
   switch (event.code) {
     case 'Space':
       return () => model.toggleListening()
+    case 'ArrowUp':
+    case 'ArrowDown':
+      // A focused slider keeps its own arrows.
+      if (event.shiftKey || target?.closest('[role="slider"], input[type="range"]')) return null
+      return () => model.moveSentence(event.code === 'ArrowUp' ? -1 : 1)
     case 'ArrowLeft':
     case 'ArrowRight': {
       if (!audio) return null
@@ -53,7 +66,9 @@ export function readerShortcut(event: KeyboardEvent, model: ReaderModel, showHel
     case 'NumpadEnter':
       // A focused button or link keeps Enter.
       if (target?.closest('button, a, [role="slider"]') || !model.activeSentence.value) return null
-      return () => model.speakActiveSentence()
+      return model.wordCursor.value !== null ? () => model.lookUpCursorWord() : () => model.speakActiveSentence()
+    case 'Escape':
+      return model.wordCursor.value !== null ? () => { model.wordCursor.value = null } : null
     case 'Slash':
       return event.shiftKey ? showHelp : null
   }
@@ -71,7 +86,7 @@ export function useReaderShortcuts(model: ReaderModel, showHelp: () => void) {
       // The focused scrubber would also move by its own arrow keys.
       event.stopPropagation()
       if (event.code === 'Space') spaceHandled = true
-      if (!event.repeat || event.code === 'ArrowLeft' || event.code === 'ArrowRight') action()
+      if (!event.repeat || event.code.startsWith('Arrow')) action()
     }
     // A button is pressed by Space when the key goes up.
     const onKeyUp = (event: KeyboardEvent) => {

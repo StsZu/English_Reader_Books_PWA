@@ -249,6 +249,50 @@ describe('збережене в читалці', () => {
   })
 })
 
+describe('вибір із клавіатури (specs/008, A3)', () => {
+  it('↑ / ↓ ідуть реченнями розділу через межі абзаців і зупиняються на краях', async () => {
+    const model = new ReaderModel(translationTestBook(), { provider: () => new RecordingProvider() })
+    model.moveSentence(1)
+    expect(model.activeSentence.value).toEqual(ref(p0, 0))
+    await waitForTranslation(model, p0)
+    const reveals = model.revealRequest.value
+    model.moveSentence(1)
+    model.moveSentence(1)
+    expect(model.activeSentence.value).toEqual(ref(p1, 0))
+    expect(model.revealRequest.value).toBe(reveals + 2)
+    model.moveSentence(1)
+    expect(model.activeSentence.value).toEqual(ref(p1, 0))
+    model.moveSentence(-1)
+    expect(model.activeSentence.value).toEqual(ref(p0, 1))
+    model.moveSentence(-1)
+    model.moveSentence(-1)
+    expect(model.activeSentence.value).toEqual(ref(p0, 0))
+  })
+
+  it('курсор слова в межах речення, Enter — картка цього слова, нове речення прибирає курсор', async () => {
+    WordLookupService.fixture = (word: string) => ({
+      headword: word, lemma: word.toLowerCase(), ipa: '', partOfSpeech: '', contextTranslation: 'т',
+      otherTranslations: [], note: '', level: '', forms: '', irregular: false,
+    })
+    const model = new ReaderModel(translationTestBook(), { provider: () => new RecordingProvider() })
+    model.moveWord(1)
+    expect(model.wordCursor.value).toBeNull()
+    model.moveSentence(1)
+    model.moveWord(-1)
+    expect(model.wordCursor.value).toBe(1)
+    model.moveWord(1)
+    expect(model.wordCursor.value).toBe(1)
+    model.moveWord(-1)
+    model.moveWord(-1)
+    expect(model.wordCursor.value).toBe(0)
+    model.lookUpCursorWord()
+    expect(model.wordLookup.value).toMatchObject({ word: 'First', sentence: 'First sentence.', ref: ref(p0, 0) })
+    model.closeWordCard()
+    model.moveSentence(1)
+    expect(model.wordCursor.value).toBeNull()
+  })
+})
+
 // MARK: - Fragment selection (stage 2.1)
 
 describe('виділення фрагмента', () => {
