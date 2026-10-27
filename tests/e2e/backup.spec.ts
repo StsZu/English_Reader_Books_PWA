@@ -6,7 +6,7 @@ import { demoBook } from '../fixtures/language.ts'
 const demo = demoBook.title
 const [first, second] = demoBook.words
 const p = demoBook.paragraph
-const { paragraph: index, status } = demoBook.position
+const { nextChapter, paragraph: index, status } = demoBook.position
 
 const word = (page: Page, text: string): Locator =>
   page.locator(`[data-p="${p}"] .w`).filter({ hasText: new RegExp(`^${text}$`) }).first()
@@ -29,7 +29,6 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('копія → скидання → відновлення: місце читання, слово, цитата й налаштування повертаються, ключ лишається свій', async ({ page }, testInfo) => {
-  test.skip(demoBook.position.nextChapter, 'the place is set in chapter 1')
   await page.goto('./?reset&voice=system&testTranslation&testWordCard')
   await page.getByTestId(`book-${demo}`).click()
 
@@ -46,6 +45,10 @@ test('копія → скидання → відновлення: місце ч�
   await expect(page.getByTestId('saveFragment')).toHaveText(/Збережено/)
   await page.getByTestId('hideParallelTranslation').click()
 
+  if (nextChapter) {
+    await page.getByTestId('nextChapter').scrollIntoViewIfNeeded()
+    await page.getByTestId('nextChapter').click()
+  }
   await page.getByTestId('readerScroll').evaluate((el, index) => {
     el.scrollTop = el.querySelector<HTMLElement>(`[data-p="${index}"]`)!.offsetTop - 28
   }, index)
