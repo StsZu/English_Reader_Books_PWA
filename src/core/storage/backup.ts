@@ -90,7 +90,7 @@ export async function createBackup(now = new Date()): Promise<Blob> {
   }
   await tx.done
   const lines = [
-    JSON.stringify({ format: BACKUP_FORMAT, version: BACKUP_VERSION, app: databaseName, created: now.toISOString() }),
+    JSON.stringify({ format: BACKUP_FORMAT, version: BACKUP_VERSION, app: databaseName, build: __APP_VERSION__, created: now.toISOString() }),
     ...records.map((r) => JSON.stringify(r)),
     JSON.stringify({ settings: storedSettings() }),
     JSON.stringify({ end: { books: records.filter((r) => r.store === 'books').length, records: records.length } }),

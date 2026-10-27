@@ -1,6 +1,7 @@
 // Port of EnglishReader/Views/LibraryView.swift: «Мої книжки», import, delete, saved list.
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { aiServicesOpen, openBook } from '../../app/router.ts'
+import { pendingUpdate } from '../../app/update.ts'
 import { addBook, books, deleteBook, lastError } from '../../core/storage/library.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { importFile } from '../../core/import/importer.ts'
@@ -8,7 +9,7 @@ import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } fr
 import { formatLabel, type BookSummary } from '../../core/model/book.ts'
 import { errorMessage } from '../../contracts.ts'
 import {
-  ConfirmDialog, ContentUnavailable, ContextMenu, FormSheet, IconButton, NavBar, ProgressSpinner,
+  ConfirmDialog, ContentUnavailable, ContextMenu, FormSheet, IconButton, NavBar, NoticeBar, ProgressSpinner,
 } from '../components/index.ts'
 import { SavedList } from '../saved/SavedList.tsx'
 import './library.css'
@@ -66,6 +67,9 @@ export function LibraryScreen() {
           </>
         }
       />
+      {pendingUpdate.value && (
+        <NoticeBar text="Доступна нова версія." actionTitle="Оновити" onAction={pendingUpdate.value} testID="updateBar" />
+      )}
       <input ref={input} type="file" accept={ACCEPT} class="library-input" data-testid="importInput" onChange={onFile} />
       <main class="library-scroll">
         {list.length === 0 && (

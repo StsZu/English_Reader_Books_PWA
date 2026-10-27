@@ -86,7 +86,7 @@ describe('резервна копія', () => {
     expect(text).not.toContain('openaiKey')
     expect(text).not.toContain('lastBackup')
     expect(JSON.parse(text.split('\n')[0])).toEqual({
-      format: 'reader-backup', version: BACKUP_VERSION, app: databaseName, created: '2026-10-27T12:00:00.000Z',
+      format: 'reader-backup', version: BACKUP_VERSION, app: databaseName, build: __APP_VERSION__, created: '2026-10-27T12:00:00.000Z',
     })
 
     await resetAll()

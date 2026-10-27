@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDayMonth, formatNumber, linesLabel, scaleLabel } from '../../src/core/util/format.ts'
+import { formatBuildVersion, formatDayMonth, formatNumber, linesLabel, scaleLabel } from '../../src/core/util/format.ts'
 
 describe('format', () => {
   // ServiceTests.testAutoHideThresholdUnitsAndLabels (labels)
@@ -20,5 +20,10 @@ describe('format', () => {
 
   it('дата дд.мм', () => {
     expect(formatDayMonth(new Date(2026, 9, 5))).toBe('05.10')
+  })
+
+  it('версія збірки: час за Києвом (зима й літо) і хеш коміту, якщо він є', () => {
+    expect(formatBuildVersion(new Date('2026-10-27T11:05:00Z'), 'f5eee21')).toBe('27.10.2026 13:05 · f5eee21')
+    expect(formatBuildVersion(new Date('2026-07-01T21:30:00Z'), null)).toBe('02.07.2026 00:30')
   })
 })

@@ -48,3 +48,13 @@ test('моделі мають типові значення й зберігаю�
   await page.waitForTimeout(400)
   await page.screenshot({ path: 'build/visual/ai-services.png' })
 })
+
+test('версія застосунку: дата, час і коміт збірки, та сама, що в service worker (specs/007-version)', async ({ page }) => {
+  await page.goto('./?reset')
+  await page.getByTestId('settingsButton').click()
+  const version = page.getByTestId('appVersion')
+  await version.scrollIntoViewIfNeeded()
+  await expect(version).toHaveText(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}( · [0-9a-f]{7,})?$/)
+  const worker = await page.evaluate(() => fetch('./sw.js').then((r) => r.text()))
+  expect(worker).toContain(`'shell-${await version.textContent()}'`)
+})

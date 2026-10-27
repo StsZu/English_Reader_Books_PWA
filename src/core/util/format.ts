@@ -35,6 +35,15 @@ export function formatDate(date: Date): string {
   return `${formatDayMonth(date)}.${date.getFullYear()}`
 }
 
+/** "27.10.2026 13:05 · f5eee21": build time in Kyiv and the short commit hash, if known (specs/007-version). */
+export function formatBuildVersion(date: Date, commit: string | null): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).map((p) => [p.type, p.value]))
+  const time = `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`
+  return commit ? `${time} · ${commit}` : time
+}
+
 /** "0,7×". */
 export function scaleLabel(value: number, digits = 1): string {
   return `${formatNumber(value, digits, digits)}×`

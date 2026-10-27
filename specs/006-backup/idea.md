@@ -42,7 +42,7 @@ Id книжки випадковий, тож книжка, імпортован�
 ### B2. Формат файлу
 
 - Один файл `English Reader — копія 2026-10-27.json.gz` (`appName` з `language.ts`).
-- Усередині — рядки JSON, стиснуті gzip (`CompressionStream`). Перший рядок — заголовок: `{"format":"reader-backup","version":1,"app":"english-reader","created":"…"}`. Далі — по одному запису на рядок: `{"store":"books","key":"…","value":{…}}`, `{"settings":{…}}`. Останній рядок — `{"end":{"books":N,"records":M}}`.
+- Усередині — рядки JSON, стиснуті gzip (`CompressionStream`). Перший рядок — заголовок: `{"format":"reader-backup","version":1,"app":"english-reader","build":"…","created":"…"}` (`build` — версія застосунку, додано в `specs/007-version`). Далі — по одному запису на рядок: `{"store":"books","key":"…","value":{…}}`, `{"settings":{…}}`. Останній рядок — `{"end":{"books":N,"records":M}}`.
 - Заголовок і кінцевий рядок перевіряються:
   - копія іншого застосунку (`app` не збігається) → «Це копія Polish Reader. Відновіть її в Polish Reader.»;
   - новіша `version` → «Копію зроблено новішою версією застосунку. Оновіть застосунок.»;

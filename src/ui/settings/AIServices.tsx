@@ -1,5 +1,6 @@
 // Port of EnglishReader/Views/SettingsView.swift («ШІ-сервіси»): OpenAI key, connection check, models,
-// plus the storage state that the web version needs (V-03, FR-32) and the backup (V-15, specs/006-backup).
+// plus the storage state that the web version needs (V-03, FR-32), the backup (V-15, specs/006-backup)
+// and the app version (V-16, specs/007-version).
 import type { JSX } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { translationCheckSentence } from '../../core/language.ts'
@@ -194,6 +195,10 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
           />
           <input ref={restoreInput} type="file" accept=".gz,.json" class="library-input" data-testid="restoreInput"
             onChange={(e) => void chooseBackup(e)} />
+        </Section>
+
+        <Section header="Про застосунок">
+          <Row title="Версія" value={<span data-testid="appVersion">{__APP_VERSION__}</span>} />
         </Section>
       </List>
       <ConfirmDialog
