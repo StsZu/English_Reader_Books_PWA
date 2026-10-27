@@ -173,9 +173,12 @@ export async function removeQuote(id: string): Promise<void> {
   await persist()
 }
 
-/** Case- and diacritic-insensitive form for search. */
+/** Letters that NFD keeps whole, with their Latin base for search. */
+const baseLetters: Record<string, string> = { ł: 'l', đ: 'd', ø: 'o', ß: 'ss', æ: 'ae', œ: 'oe' }
+
+/** Case- and diacritic-insensitive form for search («lodz» finds «Łódź»). */
 export function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[łđøßæœ]/gu, (letter) => baseLetters[letter])
 }
 
 export function matches(query: string, fields: string[]): boolean {

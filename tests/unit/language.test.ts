@@ -50,6 +50,10 @@ describe('English Reader: demo book (ImportTests.testBundledDemoBookImports)', (
 })
 
 describe('English Reader: segmentation', () => {
+  it('"I." is the pronoun, not an initial', () => {
+    expect(sentences('It was I. Nobody else.')).toEqual(['It was I.', 'Nobody else.'])
+  })
+
   it('a dialogue dash does not start a new sentence', () => {
     expect(sentences('"Is it you?" — he asked.')).toEqual(['"Is it you?" — he asked.'])
     expect(sentences('Who? — Holmes.')).toEqual(['Who? — Holmes.'])

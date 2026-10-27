@@ -2,7 +2,8 @@
 // ICU breaks after abbreviations that continue the sentence (src/core/language.ts), so those are glued back.
 import type { Book, BookFormat, Paragraph, RawBook } from './book.ts'
 import {
-  abbreviations as abbreviationList, dialogueDashStartsSentence, numberAbbreviations as numberAbbreviationList, sourceLanguage,
+  abbreviations as abbreviationList, capitalLetterWords, dialogueDashStartsSentence, numberAbbreviations as numberAbbreviationList,
+  sourceLanguage,
 } from '../language.ts'
 
 export interface WordRange {
@@ -20,15 +21,17 @@ const hasLetter = (s: string): boolean => /\p{L}/u.test(s)
 /** Abbreviations glued only before a number ("No. 7"), since "No." is also a whole reply. */
 const numberAbbreviations = new Set(numberAbbreviationList)
 
+const capitalWords = new Set(capitalLetterWords)
+
 /**
  * Whether the next sentence continues this one: it ends with an abbreviation, a single-letter
- * initial ("A.", not "I."), or a number abbreviation followed by a number.
+ * initial ("A.", not the English word "I."), or a number abbreviation followed by a number.
  */
 export function gluesToNext(sentence: string, next: string): boolean {
   const match = /(?:^|[\s("'“‘—–-])((?:\p{L}\.)*\p{L}+)\.$/u.exec(sentence)
   if (!match) return false
   const token = match[1]
-  if (/^\p{Lu}$/u.test(token)) return token !== 'I'
+  if (/^\p{Lu}$/u.test(token)) return !capitalWords.has(token)
   const lower = token.toLowerCase()
   if (numberAbbreviations.has(lower)) return /^\p{N}/u.test(next)
   return abbreviations.has(lower)

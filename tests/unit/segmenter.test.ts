@@ -15,7 +15,6 @@ describe('TextSegmenter', () => {
       .toEqual(['A. Writer wrote it, e.g. a lot.', 'Then he left.'])
     expect(sentences('He lived at No. 7 Baker Street. "No." She left.'))
       .toEqual(['He lived at No. 7 Baker Street.', '"No."', 'She left.'])
-    expect(sentences('It was I. Nobody else.')).toEqual(['It was I.', 'Nobody else.'])
   })
 
   it('приклеює фрагменти без літер до попереднього речення', () => {

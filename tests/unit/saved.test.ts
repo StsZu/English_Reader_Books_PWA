@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WordCard } from '../../src/contracts.ts'
 import {
-  CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, highlightForms, initSaved, isSaved, quotes, quotesText,
+  CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, fold, highlightForms, initSaved, isSaved, matches, quotes, quotesText,
   removeAllForTests, removeQuote, removeWordByLemma, saveQuote, saveWord, seedForTests, words, wordsCSV, type SavedPlace,
 } from '../../src/core/saved/saved.ts'
 import { fixtureSavedWords } from '../../src/core/language.ts'
@@ -57,6 +57,13 @@ describe('збережені слова', () => {
     await saveWord(card('cafe', 'café'), 'At the café.', place('b'))
     expect(filterWords(null, 'CAFE').length).toBe(1)
     expect(filterWords(null, 'café').length).toBe(1)
+  })
+
+  it('пошук без літер, які не мають окремого знака діакритики: «lodz» знаходить «Łódź»', () => {
+    expect(fold('Łódź')).toBe(fold('lodz'))
+    expect(fold('ŁÓDŹ')).toBe('lodz')
+    expect(fold('Søren Straße')).toBe('soren strasse')
+    expect(matches('zolw', ['żółw'])).toBe(true)
   })
 
   // testOldSavedWordsDecodeWithoutTrainingFields

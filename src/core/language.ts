@@ -31,6 +31,9 @@ export const abbreviations = [
 /** Abbreviations glued only before a number ("No. 7"), since "No." is also a whole reply. */
 export const numberAbbreviations = ['no', 'nos', 'vol', 'p', 'pp', 'ch', 'fig']
 
+/** Capital letters that are a word before a full stop, not an initial ("It was I. Nobody else."). */
+export const capitalLetterWords = ['I']
+
 /** Whether a dialogue dash after the end of a sentence starts a new one («…? — Jestem Polak.»). */
 export const dialogueDashStartsSentence = false
 
