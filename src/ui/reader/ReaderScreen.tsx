@@ -328,10 +328,14 @@ function Reader({ model }: { model: ReaderModel }) {
       <AudioSheet model={model} />
       <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ReaderPanel open={panelOpen} onClose={() => setPanelOpen(false)} tab={panelTab} onTab={setPanelTab}
-        book={model.book} chapter={chapterIndex}
+        book={model.book} chapter={chapterIndex} paragraph={model.topParagraph.value}
         onSelectChapter={(index) => {
           model.searchReturn.value = null
           model.goToChapter(index)
+        }}
+        onSelectParagraph={(ref) => {
+          model.searchReturn.value = null
+          model.goToParagraph(ref)
         }}
         onFound={(ref) => model.showFound(ref)} searchFocus={searchFocus}
         onShowShortcuts={() => {

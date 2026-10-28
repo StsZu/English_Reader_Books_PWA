@@ -1,6 +1,6 @@
 // Port of EnglishReader/Model/TextSegmenter.swift. NLTokenizer is replaced by Intl.Segmenter (ICU);
 // ICU breaks after abbreviations that continue the sentence (src/core/language.ts), so those are glued back.
-import type { Book, BookFormat, Paragraph, RawBook } from './book.ts'
+import type { Book, BookFormat, Chapter, ContentsEntry, Paragraph, RawBlock, RawBook, TextMark } from './book.ts'
 import {
   abbreviations as abbreviationList, capitalLetterWords, dialogueDashStartsSentence, numberAbbreviations as numberAbbreviationList,
   sourceLanguage,
@@ -88,19 +88,81 @@ export function normalizeWhitespace(text: string): string {
   return text.replaceAll(' ', ' ').replaceAll('­', '').replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Moves the italic and bold ranges of a block onto its sentences. Every sentence is a piece of the normalized block
+ * text in order (only the spaces between them are dropped); a block whose text was not normalized keeps no ranges.
+ */
+export function sentenceMarks(block: RawBlock, list: string[]): TextMark[] {
+  if (!block.marks?.length || normalizeWhitespace(block.text) !== block.text) return []
+  const result: TextMark[] = []
+  let from = 0
+  list.forEach((sentence, index) => {
+    const base = block.text.indexOf(sentence, from)
+    if (base < 0) return
+    from = base + sentence.length
+    for (const mark of block.marks!) {
+      const start = Math.max(mark.start, base) - base
+      const end = Math.min(mark.end, from) - base
+      if (end > start) result.push({ sentence: index, start, end, style: mark.style })
+    }
+  })
+  return result
+}
+
 export function makeBook(raw: RawBook, format: BookFormat, id: string = crypto.randomUUID().toUpperCase(),
   importedAt: string = new Date().toISOString()): Book {
-  const chapters = []
+  const chapters: Chapter[] = []
+  /** For each raw chapter: its index in the book (or -1) and the paragraph each block became or precedes. */
+  const placed: { chapter: number; paragraphOf: number[] }[] = []
   for (const rawChapter of raw.chapters) {
     const paragraphs: Paragraph[] = []
+    const paragraphOf: number[] = []
     for (const block of rawChapter.blocks) {
+      paragraphOf.push(paragraphs.length)
       const list = block.kind === 'heading'
         ? [normalizeWhitespace(block.text)].filter((s) => s.length > 0)
         : sentences(block.text)
-      if (list.length > 0) paragraphs.push({ kind: block.kind, sentences: list })
+      if (list.length === 0) continue
+      const paragraph: Paragraph = { kind: block.kind, sentences: list }
+      const marks = sentenceMarks(block, list)
+      if (marks.length > 0) paragraph.marks = marks
+      paragraphs.push(paragraph)
     }
+    paragraphOf.push(paragraphs.length)
+    placed.push({ chapter: paragraphs.length === 0 ? -1 : chapters.length, paragraphOf })
     if (paragraphs.length === 0) continue
     chapters.push({ title: rawChapter.title, paragraphs })
   }
-  return { id, title: raw.title, author: raw.author, format, importedAt, chapters }
+  const book: Book = { id, title: raw.title, author: raw.author, format, importedAt, chapters }
+  const contents = resolveContents(raw, chapters, placed)
+  if (contents.length > 0) book.contents = contents
+  return book
+}
+
+/**
+ * Turns the EPUB table of contents into paragraph addresses (specs/011-epub-formatting, E1). Entries whose file was
+ * not imported are dropped; a chapter that no entry points into gets its own entry, so «Зміст» reaches every chapter.
+ */
+function resolveContents(raw: RawBook, chapters: Chapter[], placed: { chapter: number; paragraphOf: number[] }[]): ContentsEntry[] {
+  if (!raw.contents?.length) return []
+  const resolved: ContentsEntry[] = []
+  for (const entry of raw.contents) {
+    const index = raw.chapters.findIndex((c) => c.source === entry.source)
+    const chapter = index < 0 ? -1 : placed[index].chapter
+    if (chapter < 0) continue
+    const block = entry.anchor ? raw.chapters[index].anchors?.[entry.anchor] : 0
+    if (block === undefined) continue
+    const last = chapters[chapter].paragraphs.length - 1
+    const paragraph = Math.min(placed[index].paragraphOf[Math.min(block, placed[index].paragraphOf.length - 1)], last)
+    resolved.push({ title: entry.title, level: entry.level, chapter, paragraph })
+  }
+  if (resolved.length === 0) return []
+  chapters.forEach((chapter, index) => {
+    if (!resolved.some((e) => e.chapter === index)) resolved.push({ title: chapter.title, level: 0, chapter: index, paragraph: 0 })
+  })
+  // Book order; entries at the same place keep the order of the table of contents.
+  return resolved
+    .map((entry, order) => ({ entry, order }))
+    .sort((a, b) => a.entry.chapter - b.entry.chapter || a.entry.paragraph - b.entry.paragraph || a.order - b.order)
+    .map(({ entry }) => entry)
 }

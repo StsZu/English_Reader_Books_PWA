@@ -1,7 +1,7 @@
 // Port of ReaderPanel.swift: reading settings, contents and saved items, sliding in from the right (D1–D7);
 // search in the book above the contents (specs/010-library, F4).
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import type { Book, SentenceRef } from '../../../core/model/book.ts'
+import type { Book, ContentsEntry, ParagraphRef, SentenceRef } from '../../../core/model/book.ts'
 import { MIN_QUERY_LENGTH, searchBook, SEARCH_LIMIT, type SearchHit } from '../../../core/model/search.ts'
 import { fold } from '../../../core/util/fold.ts'
 import { sourceLanguage } from '../../../core/language.ts'
@@ -24,7 +24,11 @@ export interface ReaderPanelProps {
   onTab: (tab: ReaderPanelTab) => void
   book: Book
   chapter: number
+  /** The paragraph at the top of the screen: the current entry of the book's own contents. */
+  paragraph: number
   onSelectChapter: (index: number) => void
+  /** An entry of the book's own contents (specs/011-epub-formatting, E1). */
+  onSelectParagraph: (ref: ParagraphRef) => void
   onOpenPlace: (place: SavedPlace) => void
   onShowShortcuts: () => void
   /** A search result chosen in «Зміст». */
@@ -64,17 +68,52 @@ function snippet(hit: SearchHit) {
   )
 }
 
+/** The last entry at or before the place, i.e. the part of the book being read. */
+export function currentEntry(entries: ContentsEntry[], place: ParagraphRef): number {
+  let current = -1
+  entries.forEach((entry, index) => {
+    if (entry.chapter < place.chapter || (entry.chapter === place.chapter && entry.paragraph <= place.paragraph)) current = index
+  })
+  return current
+}
+
+function BookContents({ entries, place, onSelect }: { entries: ContentsEntry[]; place: ParagraphRef; onSelect: (ref: ParagraphRef) => void }) {
+  const current = currentEntry(entries, place)
+  return (
+    <div class="rp-contents" role="list">
+      {entries.map((entry, index) => (
+        <button
+          key={index}
+          type="button"
+          role="listitem"
+          class="rp-chapter rp-entry"
+          style={{ '--level': entry.level }}
+          aria-current={index === current ? 'true' : undefined}
+          aria-label={entry.title}
+          onClick={() => onSelect({ chapter: entry.chapter, paragraph: entry.paragraph })}
+          data-testid={`contents-${index}`}
+        >
+          <span class="rp-chapter-title">{entry.title}</span>
+          {index === current && <Icon name="bookmark" filled size={18} class="rp-chapter-mark" />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 interface ContentsProps {
   book: Book
   chapter: number
+  paragraph: number
   onSelect: (index: number) => void
+  onSelectParagraph: (ref: ParagraphRef) => void
   query: string
   onQuery: (query: string) => void
   onFound: (ref: SentenceRef) => void
   searchFocus: number
 }
 
-function Contents({ book, chapter, onSelect, query, onQuery, onFound, searchFocus }: ContentsProps) {
+function Contents({ book, chapter, paragraph, onSelect, onSelectParagraph, query, onQuery, onFound, searchFocus }: ContentsProps) {
   const box = useRef<HTMLDivElement>(null)
   const [searched, setSearched] = useState(query)
   useEffect(() => {
@@ -111,6 +150,8 @@ function Contents({ book, chapter, onSelect, query, onQuery, onFound, searchFocu
             <p class="rp-footnote rp-results-more" data-testid="searchMore">Показано {SEARCH_LIMIT} з {result.total}</p>
           )}
         </div>
+      ) : book.contents ? (
+        <BookContents entries={book.contents} place={{ chapter, paragraph }} onSelect={onSelectParagraph} />
       ) : (
         <div class="rp-contents" role="list">
           {book.chapters.map((item, index) => (
@@ -135,7 +176,8 @@ function Contents({ book, chapter, onSelect, query, onQuery, onFound, searchFocu
 }
 
 export function ReaderPanel({
-  open, onClose, tab, onTab, book, chapter, onSelectChapter, onOpenPlace, onShowShortcuts, onFound, searchFocus,
+  open, onClose, tab, onTab, book, chapter, paragraph, onSelectChapter, onSelectParagraph, onOpenPlace, onShowShortcuts, onFound,
+  searchFocus,
 }: ReaderPanelProps) {
   const [dictionaries, setDictionaries] = useState(false)
   /** Kept while the panel is closed: the next result is one tap away. */
@@ -163,7 +205,8 @@ export function ReaderPanel({
           <div class="rp-divider rp-header-divider" />
           {tab === 'settings' && <SettingsTab onManageDictionaries={() => setDictionaries(true)} onShowShortcuts={onShowShortcuts} />}
           {tab === 'contents' && (
-            <Contents book={book} chapter={chapter} onSelect={(index) => { onSelectChapter(index); onClose() }}
+            <Contents book={book} chapter={chapter} paragraph={paragraph} onSelect={(index) => { onSelectChapter(index); onClose() }}
+              onSelectParagraph={(ref) => { onSelectParagraph(ref); onClose() }}
               query={query} onQuery={setQuery} onFound={(ref) => { onFound(ref); onClose() }} searchFocus={searchFocus} />
           )}
           {tab === 'saved' && (

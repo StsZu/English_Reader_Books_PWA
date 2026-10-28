@@ -38,4 +38,4 @@
 | testLiveReadingScenario | не перенесено — платний живий сценарій (T55) |
 | testAppleOfflineFallbackIsLabelled | не переноситься (V-01) |
 
-Додатково, без відповідника в Swift: `smoke`, `gallery`, `ai-services`, `offline` (Chromium), частина `library`, `search` (`specs/010-library`).
+Додатково, без відповідника в Swift: `smoke`, `gallery`, `ai-services`, `offline` (Chromium), частина `library`, `search` (`specs/010-library`), `formatting` (`specs/011-epub-formatting`).

@@ -1,7 +1,7 @@
 // Port of ReaderView.swift → ParagraphView. Each sentence and word is its own element, so taps,
 // long presses and selection resolve against what is drawn — including justified lines.
 import { memo } from 'preact/compat'
-import type { Paragraph as ParagraphData } from '../../core/model/book.ts'
+import type { Paragraph as ParagraphData, TextMark } from '../../core/model/book.ts'
 import type { WordRange } from '../../core/model/segmenter.ts'
 import { sourceLanguage } from '../../core/language.ts'
 
@@ -22,6 +22,21 @@ const inRange = (s: number, w: number, sel: ParagraphProps['selection']) =>
   !!sel && (s > sel.lower[0] || (s === sel.lower[0] && w >= sel.lower[1]))
     && (s < sel.upper[0] || (s === sel.upper[0] && w <= sel.upper[1]))
 
+/**
+ * Italic and bold classes for a piece of sentence `s` (specs/011-epub-formatting, E2). A word takes the style of any mark
+ * it touches, so a tap target is never split; a gap between words only when the mark covers it whole.
+ */
+function styleClass(marks: TextMark[] | undefined, s: number, start: number, end: number, word: boolean): string {
+  if (!marks) return ''
+  let cls = ''
+  for (const style of ['italic', 'bold'] as const) {
+    const on = marks.some((m) => m.sentence === s && m.style === style
+      && (word ? m.start < end && start < m.end : m.start <= start && end <= m.end))
+    if (on) cls += style === 'italic' ? ' em' : ' strong'
+  }
+  return cls
+}
+
 function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, wordCursor, savedForms }: ParagraphProps) {
   const heading = paragraph.kind === 'heading'
   return (
@@ -34,10 +49,11 @@ function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, w
         ranges.forEach((range, w) => {
           if (range.start > cursor) {
             const gapSelected = w > 0 && inRange(s, w - 1, selection) && inRange(s, w, selection)
-            pieces.push(<span class={gapSelected ? 'g sel' : 'g'}>{sentence.slice(cursor, range.start)}</span>)
+            const gapStyle = styleClass(paragraph.marks, s, cursor, range.start, false)
+            pieces.push(<span class={(gapSelected ? 'g sel' : 'g') + gapStyle}>{sentence.slice(cursor, range.start)}</span>)
           }
           const word = sentence.slice(range.start, range.end)
-          let cls = 'w'
+          let cls = 'w' + styleClass(paragraph.marks, s, range.start, range.end, true)
           if (inRange(s, w, selection)) cls += ' sel'
           if (savedForms.size > 0 && savedForms.has(word.toLowerCase())) cls += ' saved'
           if (wordCursor && wordCursor.sentence === s && wordCursor.word === w) cls += ' cursor'
@@ -47,7 +63,8 @@ function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, w
         if (cursor < sentence.length) {
           // Trailing punctuation belongs to the band when the selection continues past this sentence.
           const tailSelected = ranges.length > 0 && inRange(s, ranges.length - 1, selection) && inRange(s + 1, 0, selection)
-          pieces.push(<span class={tailSelected ? 'g sel' : 'g'}>{sentence.slice(cursor)}</span>)
+          const tailStyle = styleClass(paragraph.marks, s, cursor, sentence.length, false)
+          pieces.push(<span class={(tailSelected ? 'g sel' : 'g') + tailStyle}>{sentence.slice(cursor)}</span>)
         }
         const between = s > 0
           ? <span class={inRange(s - 1, Number.MAX_SAFE_INTEGER, selection) && inRange(s, 0, selection) ? 'g sel' : 'g'}> </span>

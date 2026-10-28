@@ -9,6 +9,7 @@ import {
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import { importFile } from '../../core/import/importer.ts'
+import type { SkippedContent } from '../../core/import/epub.ts'
 import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } from '../../core/saved/saved.ts'
 import { formatLabel, type BookSummary } from '../../core/model/book.ts'
 import { errorMessage } from '../../contracts.ts'
@@ -27,7 +28,9 @@ export function LibraryScreen() {
   const [bookToDelete, setBookToDelete] = useState<BookSummary | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   /** A book imported without some EPUB files (R2): opened after the reader has seen the warning. */
-  const [partial, setPartial] = useState<{ id: string; chapters: number; unreadable: string[] } | null>(null)
+  const [partial, setPartial] = useState<{ id: string; chapters: number; unreadable: string[]; skipped: string } | null>(null)
+  /** An EPUB whose illustrations, notes or extra pages were left out (specs/011-epub-formatting, E3). */
+  const [textOnly, setTextOnly] = useState<{ id: string; skipped: string } | null>(null)
   const [query, setQuery] = useState('')
   const [sortMenu, setSortMenu] = useState<{ x: number; y: number } | null>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -46,8 +49,11 @@ export function LibraryScreen() {
     setImporting(true)
     try {
       const unreadable: string[] = []
-      const summary = await addBook(await importFile(file, unreadable))
-      if (unreadable.length > 0) setPartial({ id: summary.id, chapters: summary.chapterCount, unreadable })
+      const left: SkippedContent = { images: 0, notes: 0, pages: 0 }
+      const summary = await addBook(await importFile(file, unreadable, left))
+      const skipped = skippedSummary(left)
+      if (unreadable.length > 0) setPartial({ id: summary.id, chapters: summary.chapterCount, unreadable, skipped })
+      else if (skipped) setTextOnly({ id: summary.id, skipped })
       else openBook(summary.id)
     } catch (error) {
       lastError.value = errorMessage(error)
@@ -159,7 +165,8 @@ export function LibraryScreen() {
       <ConfirmDialog
         open={partial !== null}
         title="Книжку імпортовано не повністю"
-        message={partial && `Розділів: ${partial.chapters}. Не вдалося прочитати файлів: ${partial.unreadable.length} (${partial.unreadable.join(', ')}). Можливо, EPUB пошкоджений.`}
+        message={partial && `Розділів: ${partial.chapters}. Не вдалося прочитати файлів: ${partial.unreadable.length} (${partial.unreadable.join(', ')}). Можливо, EPUB пошкоджений.`
+          + (partial.skipped ? ` Також не перенесено: ${partial.skipped}.` : '')}
         actions={[{ label: 'Відкрити', role: 'cancel', testID: 'partialImportOpen' }]}
         onClose={() => {
           if (partial) openBook(partial.id)
@@ -167,12 +174,29 @@ export function LibraryScreen() {
         }}
         testID="partialImport"
       />
+      <ConfirmDialog
+        open={textOnly !== null}
+        title="Книжку імпортовано як текст"
+        message={textOnly && `Застосунок переносить лише текст книжки. Не перенесено: ${textOnly.skipped}.`}
+        actions={[{ label: 'Відкрити', role: 'cancel', testID: 'textImportOpen' }]}
+        onClose={() => {
+          if (textOnly) openBook(textOnly.id)
+          setTextOnly(null)
+        }}
+        testID="textImport"
+      />
       <FormSheet open={showSaved} onClose={() => setShowSaved(false)} title="Збережене" ariaLabel="Збережене"
         doneTestID="savedDone" testID="savedSheet" width={700} height={820}>
         <SavedList currentBookID={null} existingBooks={new Set(list.map((b) => b.id))} canOpen={() => true} onOpen={(place) => void open(place)} />
       </FormSheet>
     </div>
   )
+}
+
+/** «ілюстрацій: 12, приміток: 30, додаткових сторінок: 2»; empty when nothing was left out. */
+export function skippedSummary(left: SkippedContent): string {
+  const parts: [number, string][] = [[left.images, 'ілюстрацій'], [left.notes, 'приміток'], [left.pages, 'додаткових сторінок']]
+  return parts.filter(([count]) => count > 0).map(([count, label]) => `${label}: ${count}`).join(', ')
 }
 
 const palette = ['#5856D6', '#30B0C7', '#A2845E', '#AF52DE', '#007AFF', '#FF9500', '#34C759']

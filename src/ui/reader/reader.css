@@ -74,6 +74,15 @@
   background: var(--reader-highlight);
 }
 
+/* Italic and bold of the EPUB (specs/011-epub-formatting, E2). */
+.para .em {
+  font-style: italic;
+}
+
+.para .strong {
+  font-weight: 600;
+}
+
 .para .w.cursor {
   text-decoration: underline 2px;
   text-underline-offset: 0.18em;

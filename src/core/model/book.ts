@@ -6,9 +6,30 @@ export const formatLabel = (format: BookFormat): string => format.toUpperCase()
 
 export type ParagraphKind = 'heading' | 'text'
 
+export type TextStyle = 'italic' | 'bold'
+
+/** Italic or bold text inside one sentence: [start, end) offsets of the sentence text (specs/011-epub-formatting, E2). */
+export interface TextMark {
+  sentence: number
+  start: number
+  end: number
+  style: TextStyle
+}
+
 export interface Paragraph {
   kind: ParagraphKind
   sentences: string[]
+  /** Missing when the paragraph has no italic or bold text, and in books imported before 2026-10-28. */
+  marks?: TextMark[]
+}
+
+/** An entry of the book's own table of contents, pointing at a paragraph (specs/011-epub-formatting, E1). */
+export interface ContentsEntry {
+  title: string
+  /** 0 for the top level. */
+  level: number
+  chapter: number
+  paragraph: number
 }
 
 export interface Chapter {
@@ -24,6 +45,8 @@ export interface Book {
   /** ISO 8601 date. */
   importedAt: string
   chapters: Chapter[]
+  /** The EPUB table of contents; missing for TXT and MD, EPUB without one and books imported before 2026-10-28. */
+  contents?: ContentsEntry[]
 }
 
 export interface BookSummary {
@@ -54,17 +77,31 @@ export interface SentenceRef {
 export interface RawBlock {
   kind: ParagraphKind
   text: string
+  /** Italic and bold ranges of `text`. */
+  marks?: { start: number; end: number; style: TextStyle }[]
 }
 
 export interface RawChapter {
   title: string
   blocks: RawBlock[]
+  /** EPUB: the file of the chapter and the block that follows each element id in it, for the table of contents. */
+  source?: string
+  anchors?: Record<string, number>
+}
+
+/** A table of contents entry before it is resolved to a paragraph: the file and the element id in it. */
+export interface RawContentsEntry {
+  title: string
+  level: number
+  source: string
+  anchor: string
 }
 
 export interface RawBook {
   title: string
   author: string
   chapters: RawChapter[]
+  contents?: RawContentsEntry[]
 }
 
 export const paragraphText = (paragraph: Paragraph): string => paragraph.sentences.join(' ')

@@ -2,9 +2,9 @@
 // container.xml and the OPF are read with a small tag scanner (like the Swift XMLParser delegates)
 // so the importer behaves the same in every browser and in Node tests.
 import { ImportError } from '../../contracts.ts'
-import type { RawBlock, RawBook, RawChapter } from '../model/book.ts'
+import type { RawBlock, RawBook, RawChapter, RawContentsEntry } from '../model/book.ts'
 import { normalizeWhitespace } from '../model/segmenter.ts'
-import { decodeEntities, htmlBlocks } from './html.ts'
+import { decodeEntities, htmlDocument } from './html.ts'
 import { ZipArchive, ZipError } from './zip.ts'
 
 interface XMLTag {
@@ -83,22 +83,33 @@ export function containerRootFile(xml: string): string | null {
 export interface OPFPackage {
   title: string
   author: string
-  manifest: Map<string, { href: string; mediaType: string }>
+  manifest: Map<string, { href: string; mediaType: string; properties: string }>
   spine: string[]
+  /** Spine documents with linear="no" (notes, appendices): left out of the book. */
+  nonLinear: string[]
+  /** The id of the NCX table of contents (`<spine toc>`). */
+  ncx: string
 }
 
 export function parseOPF(xml: string): OPFPackage {
-  const pkg: OPFPackage = { title: '', author: '', manifest: new Map(), spine: [] }
+  const pkg: OPFPackage = { title: '', author: '', manifest: new Map(), spine: [], nonLinear: [], ncx: '' }
   for (const tag of scanTags(xml)) {
     if (tag.closing) continue
     switch (tag.local) {
       case 'item':
         if (tag.attributes.id && tag.attributes.href) {
-          pkg.manifest.set(tag.attributes.id, { href: tag.attributes.href, mediaType: tag.attributes['media-type'] ?? '' })
+          pkg.manifest.set(tag.attributes.id, {
+            href: tag.attributes.href, mediaType: tag.attributes['media-type'] ?? '', properties: tag.attributes.properties ?? '',
+          })
         }
         break
+      case 'spine':
+        pkg.ncx = tag.attributes.toc ?? ''
+        break
       case 'itemref':
-        if (tag.attributes.idref && tag.attributes.linear !== 'no') pkg.spine.push(tag.attributes.idref)
+        if (!tag.attributes.idref) break
+        if (tag.attributes.linear === 'no') pkg.nonLinear.push(tag.attributes.idref)
+        else pkg.spine.push(tag.attributes.idref)
         break
       case 'title':
         if (!pkg.title && !tag.selfClosing) pkg.title = normalizeWhitespace(textAfter(xml, tag.end, 'title'))
@@ -136,6 +147,81 @@ export function resolveHref(href: string, baseDir: string): string {
   return parts.join('/')
 }
 
+const dirOf = (path: string): string => {
+  const slash = path.lastIndexOf('/')
+  return slash < 0 ? '' : path.slice(0, slash)
+}
+
+const fragment = (href: string): string => {
+  const hash = href.indexOf('#')
+  return hash < 0 ? '' : safeDecode(href.slice(hash + 1))
+}
+
+/** Entries of an EPUB 3 navigation document: links of `<nav epub:type="toc">`, the level is the depth of the lists. */
+export function parseNav(xml: string, path: string): RawContentsEntry[] {
+  const entries: RawContentsEntry[] = []
+  let inToc = false
+  let depth = 0
+  for (const tag of scanTags(xml)) {
+    if (tag.local === 'nav') {
+      if (tag.closing) inToc = false
+      else if (/\btoc\b/.test(tag.attributes['epub:type'] ?? '')) inToc = true
+      continue
+    }
+    if (!inToc) continue
+    if (tag.local === 'ol' && !tag.selfClosing) depth += tag.closing ? -1 : 1
+    if (tag.local === 'a' && !tag.closing && tag.attributes.href && !tag.selfClosing) {
+      const title = normalizeWhitespace(textAfter(xml, tag.end, 'a'))
+      if (title) {
+        entries.push({ title, level: Math.max(0, depth - 1), source: resolveHref(tag.attributes.href, dirOf(path)), anchor: fragment(tag.attributes.href) })
+      }
+    }
+  }
+  return entries
+}
+
+/** Entries of an EPUB 2 NCX: `navPoint` labels and targets, the level is the nesting of the points. */
+export function parseNCX(xml: string, path: string): RawContentsEntry[] {
+  const entries: RawContentsEntry[] = []
+  let depth = 0
+  let title = ''
+  for (const tag of scanTags(xml)) {
+    if (tag.local === 'navPoint' && !tag.selfClosing) {
+      depth += tag.closing ? -1 : 1
+      if (!tag.closing) title = ''
+    } else if (tag.local === 'text' && !tag.closing && !tag.selfClosing && depth > 0) {
+      title = normalizeWhitespace(textAfter(xml, tag.end, 'text'))
+    } else if (tag.local === 'content' && !tag.closing && tag.attributes.src && depth > 0 && title) {
+      entries.push({ title, level: depth - 1, source: resolveHref(tag.attributes.src, dirOf(path)), anchor: fragment(tag.attributes.src) })
+      title = ''
+    }
+  }
+  return entries
+}
+
+/** The book's table of contents: the EPUB 3 navigation document, else the NCX; empty when there is none or it is unreadable. */
+async function readContents(zip: ZipArchive, pkg: OPFPackage, baseDir: string): Promise<RawContentsEntry[]> {
+  const items = [...pkg.manifest.values()]
+  const nav = items.find((item) => item.properties.split(/\s+/).includes('nav'))
+  const ncx = pkg.manifest.get(pkg.ncx) ?? items.find((item) => item.mediaType === 'application/x-dtbncx+xml')
+  for (const [item, parse] of [[nav, parseNav], [ncx, parseNCX]] as const) {
+    if (!item) continue
+    const path = resolveHref(item.href, baseDir)
+    const xml = await zip.readText(path).catch(() => null)
+    const entries = xml === null ? [] : parse(xml, path)
+    if (entries.length > 0) return entries
+  }
+  return []
+}
+
+/** What the import left out of an EPUB (specs/011-epub-formatting, E3). */
+export interface SkippedContent {
+  images: number
+  notes: number
+  /** Spine documents with linear="no". */
+  pages: number
+}
+
 /** First heading; a bare number such as "IV." is joined with the heading that follows it. */
 export function chapterTitle(blocks: RawBlock[], index: number): string {
   const headings = blocks.slice(0, 4).filter((b) => b.kind === 'heading').map((b) => b.text)
@@ -148,8 +234,11 @@ export function chapterTitle(blocks: RawBlock[], index: number): string {
 /**
  * `unreadable` collects the spine files that are listed but cannot be read from the archive (R2):
  * the book is imported without them and the library says so. Empty pages (a cover) are skipped silently.
+ * `skipped` counts what is not imported at all: illustrations, note references and pages outside the reading order.
  */
-export async function parseEPUB(data: Uint8Array, fallbackTitle: string, unreadable: string[] = []): Promise<RawBook> {
+export async function parseEPUB(
+  data: Uint8Array, fallbackTitle: string, unreadable: string[] = [], skipped?: SkippedContent,
+): Promise<RawBook> {
   let zip: ZipArchive
   try {
     zip = new ZipArchive(data)
@@ -184,10 +273,22 @@ export async function parseEPUB(data: Uint8Array, fallbackTitle: string, unreada
       unreadable.push(path.split('/').pop() || path)
       continue
     }
-    const blocks = htmlBlocks(html)
+    const doc = htmlDocument(html)
+    const blocks = doc.blocks
     if (!(blocks.some((b) => b.kind === 'text') || blocks.length > 1)) continue
-    chapters.push({ title: chapterTitle(blocks, chapters.length), blocks })
+    if (skipped) {
+      skipped.images += doc.images
+      skipped.notes += doc.notes
+    }
+    chapters.push({ title: chapterTitle(blocks, chapters.length), blocks, source: path, anchors: doc.anchors })
   }
   if (chapters.length === 0) throw new ImportError({ kind: 'emptyText' })
-  return { title: pkg.title || fallbackTitle, author: pkg.author, chapters }
+  if (skipped) {
+    skipped.pages += pkg.nonLinear.filter((idref) => {
+      const item = pkg.manifest.get(idref)
+      return !!item && (item.mediaType.includes('html') || /\.x?html?$/.test(item.href))
+    }).length
+  }
+  const contents = await readContents(zip, pkg, baseDir)
+  return { title: pkg.title || fallbackTitle, author: pkg.author, chapters, ...(contents.length > 0 ? { contents } : {}) }
 }

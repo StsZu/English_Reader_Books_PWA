@@ -352,6 +352,11 @@
   flex: 1;
 }
 
+/* Nested entries of the book's own contents (specs/011-epub-formatting, E1). */
+.rp-entry {
+  padding-left: calc(16px + min(var(--level), 4) * 20px);
+}
+
 .rp-chapter-mark {
   color: var(--accent);
 }

@@ -1,5 +1,5 @@
 // Synthetic books for e2e import tests, built in memory (nothing third-party is committed).
-import { makeEPUB, zipArchive } from '../zip-writer.ts'
+import { makeEPUB, makeFormattedEPUB, zipArchive } from '../zip-writer.ts'
 
 export interface FilePayload { name: string; mimeType: string; buffer: Buffer }
 
@@ -7,6 +7,9 @@ const file = (name: string, mimeType: string, data: Uint8Array | string): FilePa
   ({ name, mimeType, buffer: Buffer.from(typeof data === 'string' ? new TextEncoder().encode(data) : data) })
 
 export const storedEPUB = (): FilePayload => file('Test Book.epub', 'application/epub+zip', makeEPUB())
+
+/** Nested contents, italic and bold, an illustration, a note and a notes page (specs/011-epub-formatting). */
+export const formattedEPUB = (): FilePayload => file('Formatted.epub', 'application/epub+zip', makeFormattedEPUB())
 
 /** An EPUB whose second chapter is listed in the OPF but missing from the archive (R2). */
 export const partialEPUB = (): FilePayload =>

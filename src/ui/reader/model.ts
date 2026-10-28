@@ -357,7 +357,7 @@ export class ReaderModel {
   show(place: SavedPlace) {
     const ref: SentenceRef = { paragraph: { chapter: place.chapter, paragraph: place.paragraph }, sentence: place.sentence }
     if (place.bookID !== this.book.id || !this.isValid(ref)) return
-    this.goTo(ref.paragraph)
+    this.goToParagraph(ref.paragraph)
     if (settings.showTranslation.value) this.select(ref)
   }
 
@@ -372,11 +372,11 @@ export class ReaderModel {
     const back = this.searchReturn.value
     if (!back) return
     this.searchReturn.value = null
-    this.goTo(back)
+    this.goToParagraph(back)
   }
 
   /** Puts the paragraph at the top of the screen, in this chapter or another one. */
-  private goTo(ref: ParagraphRef) {
+  goToParagraph(ref: ParagraphRef) {
     if (ref.chapter !== this.chapter.value) {
       this.goToChapter(ref.chapter, ref.paragraph)
     } else {

@@ -3,13 +3,15 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ImportError } from '../../src/contracts.ts'
 import { summarize } from '../../src/core/model/book.ts'
-import { isContentEncrypted, resolveHref } from '../../src/core/import/epub.ts'
-import { htmlBlocks } from '../../src/core/import/html.ts'
+import { isContentEncrypted, parseNCX, parseNav, resolveHref } from '../../src/core/import/epub.ts'
+import { htmlBlocks, htmlDocument } from '../../src/core/import/html.ts'
+import { makeBook } from '../../src/core/model/segmenter.ts'
+import { skippedSummary } from '../../src/ui/library/LibraryScreen.tsx'
 import { formatForExtension, importBook, importFile, maxFileSize } from '../../src/core/import/importer.ts'
 import { decodeText, parseMarkdown, parsePlainText } from '../../src/core/import/text.ts'
 import { ZipArchive, ZipError } from '../../src/core/import/zip.ts'
 import { demoBook } from '../fixtures/language.ts'
-import { makeEPUB, zipArchive } from '../fixtures/zip-writer.ts'
+import { makeEPUB, makeFormattedEPUB, zipArchive } from '../fixtures/zip-writer.ts'
 
 const utf8 = (s: string) => new TextEncoder().encode(s)
 
@@ -227,5 +229,67 @@ describe('неповний або завеликий EPUB (R2, R4)', () => {
       ['a.xhtml', '<p>Text.</p>', true, 300 * 1024 * 1024],
     ])
     await expect(importBook(huge, 'epub', 'x')).rejects.toMatchObject({ error: { kind: 'tooLargeUnpacked' } })
+  })
+})
+
+describe('зміст, курсив і пропущене в EPUB (specs/011-epub-formatting)', () => {
+  it('курсив і жирний — діапазони в тексті після сутностей і стиснення пробілів; текст той самий, що без розмітки', () => {
+    const html = '<p>  He  read <i>The&nbsp;Times</i>\n every <em> morning </em>&amp; <b>slept</b>.</p><h2>A <i>Title</i></h2>'
+    const doc = htmlDocument(html)
+    const plain = htmlBlocks(html.replace(/<\/?(i|em|b)>/g, ''))
+    expect(doc.blocks.map((b) => b.text)).toEqual(plain.map((b) => b.text))
+    const [p, h] = doc.blocks
+    expect(p.marks!.map((m) => [m.style, p.text.slice(m.start, m.end)])).toEqual([['italic', 'The Times'], ['italic', 'morning'], ['bold', 'slept']])
+    expect(h.marks!.map((m) => h.text.slice(m.start, m.end))).toEqual(['Title'])
+    expect(htmlDocument('<p>No styles here.</p>').blocks[0].marks).toBeUndefined()
+  })
+
+  it('id елементів вказують на свій блок; ілюстрації й знаки приміток рахуються', () => {
+    const doc = htmlDocument('<p>Before</p><h2 id="s2">Scene</h2><p>Text<a id="mid"/> more</p><div id="empty"></div><p>After<sup><a href="#n">1</a></sup> <a epub:type="noteref" href="#m">2</a></p><img src="x"/><svg><image href="y"/></svg><sup>th</sup>')
+    expect(doc.anchors).toEqual({ s2: 1, mid: 2, empty: 3 })
+    expect(doc.images).toBe(2)
+    expect(doc.notes).toBe(2)
+  })
+
+  it('зміст EPUB 3 (nav) і EPUB 2 (NCX): рівні, файли відносно документа змісту, якорі', () => {
+    expect(parseNav('<nav epub:type="toc"><ol><li><a href="a.xhtml">A</a><ol><li><a href="a.xhtml#x%20y">A <b>1</b></a></li></ol></li></ol></nav><nav epub:type="landmarks"><ol><li><a href="b.xhtml">L</a></li></ol></nav>', 'OEBPS/nav/toc.xhtml'))
+      .toEqual([
+        { title: 'A', level: 0, source: 'OEBPS/nav/a.xhtml', anchor: '' },
+        { title: 'A 1', level: 1, source: 'OEBPS/nav/a.xhtml', anchor: 'x y' },
+      ])
+    expect(parseNCX('<ncx><navMap><navPoint><navLabel><text>One</text></navLabel><content src="t/1.html#p"/><navPoint><navLabel><text>One.1</text></navLabel><content src="t/1.html#q"/></navPoint></navPoint><navPoint><navLabel><text>Two</text></navLabel><content src="t/2.html"/></navPoint></navMap></ncx>', 'OEBPS/toc.ncx'))
+      .toEqual([
+        { title: 'One', level: 0, source: 'OEBPS/t/1.html', anchor: 'p' },
+        { title: 'One.1', level: 1, source: 'OEBPS/t/1.html', anchor: 'q' },
+        { title: 'Two', level: 0, source: 'OEBPS/t/2.html', anchor: '' },
+      ])
+  })
+
+  it('імпорт: зміст з адресами абзаців, курсив у реченнях, підрахунок пропущеного', async () => {
+    const skipped = { images: 0, notes: 0, pages: 0 }
+    const book = await importBook(makeFormattedEPUB(), 'epub', 'f', [], skipped)
+    expect(skipped).toEqual({ images: 1, notes: 1, pages: 1 })
+    expect(skippedSummary(skipped)).toBe('ілюстрацій: 1, приміток: 1, додаткових сторінок: 1')
+    expect(skippedSummary({ images: 0, notes: 0, pages: 0 })).toBe('')
+    const scene = book.chapters[0].paragraphs.findIndex((p) => p.sentences[0] === 'The Second Scene')
+    expect(book.contents).toEqual([
+      { title: 'Part One', level: 0, chapter: 0, paragraph: 0 },
+      { title: 'The Second Scene', level: 1, chapter: 0, paragraph: scene },
+      { title: 'Part Two', level: 0, chapter: 1, paragraph: 0 },
+    ])
+    const first = book.chapters[0].paragraphs[1]
+    expect(first.sentences).toEqual(['He read The Times every morning.', 'It was his habit & pride.'])
+    expect(first.marks!.map((m) => [m.sentence, m.style, first.sentences[m.sentence].slice(m.start, m.end)]))
+      .toEqual([[0, 'italic', 'The Times'], [1, 'italic', 'his'], [1, 'bold', 'pride']])
+    expect(book.chapters[0].paragraphs[scene + 1].sentences).toEqual(['She came later that night.'])
+  })
+
+  it('зміст без жодного знайденого пункту не зберігається; розділ без пункту отримує власний', () => {
+    const chapter = (source: string, text: string) => ({ title: text, source, anchors: {}, blocks: [{ kind: 'text' as const, text }] })
+    const raw = { title: 'T', author: '', chapters: [chapter('a.html', 'One.'), chapter('b.html', 'Two.')] }
+    expect(makeBook({ ...raw, contents: [{ title: 'X', level: 0, source: 'z.html', anchor: '' }] }, 'epub').contents).toBeUndefined()
+    expect(makeBook({ ...raw, contents: [{ title: 'B', level: 0, source: 'b.html', anchor: '' }, { title: 'Gone', level: 1, source: 'b.html', anchor: 'nope' }] }, 'epub').contents)
+      .toEqual([{ title: 'One.', level: 0, chapter: 0, paragraph: 0 }, { title: 'B', level: 0, chapter: 1, paragraph: 0 }])
+    expect(makeBook(raw, 'epub').contents).toBeUndefined()
   })
 })

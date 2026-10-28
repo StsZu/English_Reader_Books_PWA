@@ -3,7 +3,7 @@ import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { ReaderPanel, type ReaderPanelTab } from '../../src/ui/reader/panel/ReaderPanel.tsx'
 import { allDictionaries, dictionaryOrder, defaultEnabledDictionaries, resetAllSettings, settings } from '../../src/core/storage/settings.ts'
-import type { Book, SentenceRef } from '../../src/core/model/book.ts'
+import type { Book, ParagraphRef, SentenceRef } from '../../src/core/model/book.ts'
 
 const book: Book = {
   id: 'B1', title: 'Demo', author: '', format: 'md', importedAt: new Date(0).toISOString(),
@@ -17,12 +17,17 @@ let root: HTMLDivElement
 
 function mount(
   tab: ReaderPanelTab = 'settings',
-  handlers: Partial<{ onClose: () => void; onSelectChapter: (i: number) => void; onFound: (ref: SentenceRef) => void }> = {},
+  handlers: Partial<{
+    onClose: () => void; onSelectChapter: (i: number) => void; onSelectParagraph: (ref: ParagraphRef) => void; onFound: (ref: SentenceRef) => void
+  }> = {},
+  shown: Book = book,
+  paragraph = 0,
 ) {
   act(() => {
     render(
-      <ReaderPanel open tab={tab} onTab={() => {}} book={book} chapter={0}
-        onClose={handlers.onClose ?? (() => {})} onSelectChapter={handlers.onSelectChapter ?? (() => {})} onOpenPlace={() => {}} onShowShortcuts={() => {}}
+      <ReaderPanel open tab={tab} onTab={() => {}} book={shown} chapter={0} paragraph={paragraph}
+        onClose={handlers.onClose ?? (() => {})} onSelectChapter={handlers.onSelectChapter ?? (() => {})}
+        onSelectParagraph={handlers.onSelectParagraph ?? (() => {})} onOpenPlace={() => {}} onShowShortcuts={() => {}}
         onFound={handlers.onFound ?? (() => {})} searchFocus={0} />,
       root,
     )
@@ -173,6 +178,28 @@ describe('ReaderPanel', () => {
     expect(onFound).toHaveBeenCalledWith({ paragraph: { chapter: 1, paragraph: 0 }, sentence: 0 })
     expect(onClose).toHaveBeenCalled()
     vi.useRealTimers()
+  })
+
+  it('the book\'s own contents: nested entries, the part being read marked, an entry goes to its paragraph (specs/011, E1)', () => {
+    const onClose = vi.fn()
+    const onSelectParagraph = vi.fn()
+    const withContents: Book = {
+      ...book,
+      chapters: [{ title: 'A Scandal in Bohemia', paragraphs: [{ kind: 'heading', sentences: ['I.'] }, { kind: 'text', sentences: ['One.'] }, { kind: 'heading', sentences: ['II.'] }, { kind: 'text', sentences: ['Two.'] }] }],
+      contents: [
+        { title: 'A Scandal in Bohemia', level: 0, chapter: 0, paragraph: 0 },
+        { title: 'I.', level: 1, chapter: 0, paragraph: 0 },
+        { title: 'II.', level: 1, chapter: 0, paragraph: 2 },
+      ],
+    }
+    mount('contents', { onClose, onSelectParagraph }, withContents, 3)
+    expect(byID('chapter-0')).toBeNull()
+    expect(byID('contents-2')!.getAttribute('aria-current')).toBe('true')
+    expect(byID('contents-1')!.getAttribute('aria-current')).toBeNull()
+    expect(byID('contents-2')!.style.getPropertyValue('--level')).toBe('1')
+    click('contents-2')
+    expect(onSelectParagraph).toHaveBeenCalledWith({ chapter: 0, paragraph: 2 })
+    expect(onClose).toHaveBeenCalled()
   })
 
   it('closes with the cross', () => {
