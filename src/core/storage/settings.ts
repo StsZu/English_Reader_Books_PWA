@@ -60,6 +60,8 @@ const defaults = {
   trainingCount: 10,
   trainingMode: 'automatic' as 'automatic' | 'manual' | 'random',
   trainingExercises: '1,2,3,4,5',
+  /** Order of the library (specs/010-library, F3): 'recent' | 'added' | 'title' | 'author'. */
+  librarySort: 'recent',
 }
 
 export type SettingsValues = typeof defaults

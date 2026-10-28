@@ -1,6 +1,8 @@
 // Port of EnglishReader/Services/LibraryStore.swift: index in meta `library`, books in `books`.
 import { signal } from '@preact/signals'
 import { summarize, type Book, type BookSummary } from '../model/book.ts'
+import { sourceLanguage } from '../language.ts'
+import { fold } from '../util/fold.ts'
 import { DB_NAME, STORES, clearStore, getValue, setValue, storageErrorText, transact } from './db.ts'
 import { resetAllSettings } from './settings.ts'
 import { clearAllAudio, deleteAudio } from '../audiobook/store.ts'
@@ -49,7 +51,11 @@ export async function addBook(book: Book): Promise<BookSummary> {
   try {
     index = await transact(['books', 'meta'], async (tx) => {
       await tx.objectStore('books').put(book, book.id)
-      const merged = [summary, ...asIndex(await tx.objectStore('meta').get(INDEX)).filter((b) => b.id !== book.id)]
+      const stored = asIndex(await tx.objectStore('meta').get(INDEX))
+      // A book imported again keeps the time it was last opened (specs/010-library, F1).
+      const openedAt = stored.find((b) => b.id === book.id)?.openedAt
+      if (openedAt) summary.openedAt = openedAt
+      const merged = [summary, ...stored.filter((b) => b.id !== book.id)]
       await tx.objectStore('meta').put(merged, INDEX)
       return merged
     })
@@ -59,6 +65,68 @@ export async function addBook(book: Book): Promise<BookSummary> {
   books.value = index
   announce()
   return summary
+}
+
+/** Records when the book was opened in the reader: the order «Нещодавні» and «Продовжити» (specs/010-library, F1). */
+export async function markOpened(id: string, now = new Date()): Promise<void> {
+  const openedAt = now.toISOString()
+  let index: BookSummary[]
+  try {
+    index = await transact(['meta'], async (tx) => {
+      const stored = asIndex(await tx.objectStore('meta').get(INDEX))
+      if (!stored.some((b) => b.id === id)) return stored
+      const updated = stored.map((b) => (b.id === id ? { ...b, openedAt } : b))
+      await tx.objectStore('meta').put(updated, INDEX)
+      return updated
+    })
+  } catch {
+    // Only the order of the library depends on it; the next opening tries again.
+    return
+  }
+  books.value = index
+  announce()
+}
+
+// MARK: - Order and search (specs/010-library, F2–F3)
+
+export type LibrarySort = 'recent' | 'added' | 'title' | 'author'
+
+export const librarySorts: { value: LibrarySort; label: string }[] = [
+  { value: 'recent', label: 'Нещодавні' },
+  { value: 'added', label: 'Додані' },
+  { value: 'title', label: 'Назва' },
+  { value: 'author', label: 'Автор' },
+]
+
+/** A book that was never opened counts as opened when it was imported. */
+const openedTime = (book: BookSummary): string => book.openedAt ?? book.importedAt
+
+const collator = new Intl.Collator(sourceLanguage, { sensitivity: 'base', numeric: true })
+
+/** Books in the chosen order; ties keep the order of the index (newest import first). An unknown order is «Нещодавні». */
+export function sortBooks(list: BookSummary[], sort: string): BookSummary[] {
+  const byTitle = (a: BookSummary, b: BookSummary) => collator.compare(a.title, b.title)
+  const compare: (a: BookSummary, b: BookSummary) => number =
+    sort === 'added' ? (a, b) => b.importedAt.localeCompare(a.importedAt)
+      : sort === 'title' ? byTitle
+        // Books without an author go last.
+        : sort === 'author' ? (a, b) => (!a.author !== !b.author ? (a.author ? -1 : 1) : collator.compare(a.author, b.author) || byTitle(a, b))
+          : (a, b) => openedTime(b).localeCompare(openedTime(a))
+  return [...list].sort(compare)
+}
+
+/** Books whose title or author contains the query, case- and diacritic-insensitive. */
+export function filterBooks(list: BookSummary[], query: string): BookSummary[] {
+  const needle = fold(query.trim())
+  if (!needle) return list
+  return list.filter((b) => fold(b.title).includes(needle) || fold(b.author).includes(needle))
+}
+
+/** The book for «Продовжити»: the last one opened; null when none was opened yet. */
+export function lastOpened(list: BookSummary[]): BookSummary | null {
+  let last: BookSummary | null = null
+  for (const book of list) if (book.openedAt && (!last || book.openedAt > last.openedAt!)) last = book
+  return last
 }
 
 /** Removes the book, its index entry, reading place and caches in one transaction; then its audio (separate database). */

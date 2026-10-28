@@ -105,4 +105,18 @@ describe('reader shortcuts', () => {
     readerShortcut(key('Enter'), model, () => {})?.()
     expect(calls).toEqual(['card', 'speak'])
   })
+
+  it('⌘F / Ctrl+F open the search in the book, also from its field in the panel, not over other sheets (specs/010, F4)', () => {
+    const { model } = fakeModel(false)
+    const search = () => {}
+    expect(readerShortcut(key('KeyF', { metaKey: true }), model, () => {}, search)).toBe(search)
+    expect(readerShortcut(key('KeyF', { ctrlKey: true }, document.createElement('input')), model, () => {}, search)).toBe(search)
+    expect(readerShortcut(key('KeyF', { metaKey: true, shiftKey: true }), model, () => {}, search)).toBeNull()
+    expect(readerShortcut(key('KeyF'), model, () => {}, search)).toBeNull()
+    document.body.innerHTML = '<div role="dialog" aria-modal="true" data-testid="readerPanel"></div>'
+    expect(readerShortcut(key('KeyF', { metaKey: true }), model, () => {}, search)).toBe(search)
+    document.body.innerHTML = '<div role="dialog" aria-modal="true" data-testid="wordCard"></div>'
+    expect(readerShortcut(key('KeyF', { metaKey: true }), model, () => {}, search)).toBeNull()
+    document.body.innerHTML = ''
+  })
 })

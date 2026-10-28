@@ -1,15 +1,20 @@
-// Port of EnglishReader/Views/LibraryView.swift: «Мої книжки», import, delete, saved list.
+// Port of EnglishReader/Views/LibraryView.swift: «Мої книжки», import, delete, saved list;
+// «Продовжити», search and order of the books (specs/010-library, F2–F3).
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { aiServicesOpen, openBook } from '../../app/router.ts'
 import { pendingUpdate } from '../../app/update.ts'
-import { addBook, books, deleteBook, lastError } from '../../core/storage/library.ts'
+import {
+  addBook, books, deleteBook, filterBooks, lastError, lastOpened, librarySorts, sortBooks,
+} from '../../core/storage/library.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
+import { settings } from '../../core/storage/settings.ts'
 import { importFile } from '../../core/import/importer.ts'
 import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } from '../../core/saved/saved.ts'
 import { formatLabel, type BookSummary } from '../../core/model/book.ts'
 import { errorMessage } from '../../contracts.ts'
 import {
-  ConfirmDialog, ContentUnavailable, ContextMenu, FormSheet, IconButton, NavBar, NoticeBar, ProgressSpinner,
+  ConfirmDialog, ContentUnavailable, ContextMenu, FormSheet, IconButton, MenuPopover, NavBar, NoticeBar, ProgressSpinner,
+  SearchField,
 } from '../components/index.ts'
 import { SavedList } from '../saved/SavedList.tsx'
 import './library.css'
@@ -23,8 +28,15 @@ export function LibraryScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   /** A book imported without some EPUB files (R2): opened after the reader has seen the warning. */
   const [partial, setPartial] = useState<{ id: string; chapters: number; unreadable: string[] } | null>(null)
+  const [query, setQuery] = useState('')
+  const [sortMenu, setSortMenu] = useState<{ x: number; y: number } | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const list = books.value
+  const sort = settings.librarySort.value
+  const shown = filterBooks(sortBooks(list, sort), query)
+  // With one book there is nothing to find, order or continue.
+  const many = list.length >= 2
+  const resume = many && !query.trim() ? lastOpened(list) : null
 
   async function onFile(event: Event) {
     const target = event.currentTarget as HTMLInputElement
@@ -78,8 +90,24 @@ export function LibraryScreen() {
               description="Натисніть «Імпорт», щоб додати книжку EPUB, TXT або MD." testID="libraryEmpty" />
           </div>
         )}
+        {many && (
+          <div class="library-tools">
+            <SearchField value={query} onInput={setQuery} placeholder="Назва або автор" testID="librarySearch" />
+            <IconButton icon="arrow.up.arrow.down" label="Сортування" testID="librarySortButton"
+              onClick={(event) => {
+                const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                setSortMenu({ x: box.left + box.width / 2, y: box.bottom })
+              }} />
+          </div>
+        )}
+        {resume && <ContinueRow book={resume} />}
+        {many && shown.length === 0 && (
+          <div class="library-no-results">
+            <ContentUnavailable icon="magnifyingglass" title="Нічого не знайдено" testID="libraryNoResults" />
+          </div>
+        )}
         <div class="library-grid" data-testid="libraryGrid">
-          {list.map((book) => (
+          {shown.map((book) => (
             <ContextMenu key={book.id} actions={[{ label: 'Видалити', icon: 'trash', destructive: true, testID: 'deleteBook', onSelect: () => setBookToDelete(book) }]}>
               <button type="button" class="book-button" data-testid={`book-${book.title}`} aria-label={book.title} onClick={() => openBook(book.id)}>
                 <BookCard book={book} />
@@ -89,6 +117,15 @@ export function LibraryScreen() {
         </div>
       </main>
 
+      {sortMenu && (
+        <MenuPopover x={sortMenu.x} y={sortMenu.y} onClose={() => setSortMenu(null)}
+          actions={librarySorts.map((item) => ({
+            label: item.label,
+            icon: item.value === sort ? 'checkmark' : undefined,
+            testID: `librarySort-${item.value}`,
+            onSelect: () => { settings.librarySort.value = item.value },
+          }))} />
+      )}
       <ConfirmDialog
         open={lastError.value !== null}
         title="Не вдалося імпортувати"
@@ -147,13 +184,39 @@ export function coverColor(title: string): string {
   return palette[Math.abs(sum) % palette.length]
 }
 
-function BookCard({ book }: { book: BookSummary }) {
+/** The chapter of the saved reading place; null before the book was read. */
+function useSavedChapter(bookID: string): number | null {
   const [chapter, setChapter] = useState<number | null>(null)
   useEffect(() => {
     let alive = true
-    void loadPosition(book.id).then((position) => { if (alive) setChapter(position ? position.chapter : null) })
+    void loadPosition(bookID).then((position) => { if (alive) setChapter(position ? position.chapter : null) })
     return () => { alive = false }
-  }, [book.id])
+  }, [bookID])
+  return chapter
+}
+
+const progressText = (book: BookSummary, chapter: number | null): string =>
+  chapter !== null && book.chapterCount > 0 ? `Розділ ${chapter + 1} з ${book.chapterCount}` : `Розділів: ${book.chapterCount}`
+
+/** The last opened book above the grid (specs/010-library, F2). */
+function ContinueRow({ book }: { book: BookSummary }) {
+  const chapter = useSavedChapter(book.id)
+  return (
+    <button type="button" class="library-continue" data-testid="continueReading" aria-label={`Продовжити: ${book.title}`}
+      onClick={() => openBook(book.id)}>
+      <span class="library-continue-cover" style={{ '--cover': coverColor(book.title) }} />
+      <span class="library-continue-text">
+        <span class="library-continue-label">Продовжити</span>
+        <span class="library-continue-title">{book.title}</span>
+        {book.author && <span class="library-continue-author">{book.author}</span>}
+        <span class="library-continue-place" data-testid="continuePlace">{progressText(book, chapter)}</span>
+      </span>
+    </button>
+  )
+}
+
+function BookCard({ book }: { book: BookSummary }) {
+  const chapter = useSavedChapter(book.id)
   const color = coverColor(book.title)
   return (
     <div class="book-card">
@@ -165,11 +228,7 @@ function BookCard({ book }: { book: BookSummary }) {
       </div>
       <div class="book-meta">
         <span class="book-format">{formatLabel(book.format)}</span>
-        <span class="book-progress">
-          {chapter !== null && book.chapterCount > 0
-            ? `Розділ ${chapter + 1} з ${book.chapterCount}`
-            : `Розділів: ${book.chapterCount}`}
-        </span>
+        <span class="book-progress">{progressText(book, chapter)}</span>
       </div>
     </div>
   )

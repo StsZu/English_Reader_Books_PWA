@@ -96,6 +96,8 @@ export class ReaderModel {
   readonly fragmentCopied = signal(false)
   /** Bumped when the view should scroll to `topParagraph` inside the current chapter. */
   readonly scrollRequest = signal(0)
+  /** Where the reader was before the first of consecutive jumps to search results; «Повернутися» (specs/010-library, F5). */
+  readonly searchReturn = signal<ParagraphRef | null>(null)
   /** Speech keys whose audio is ready for «Ще раз» (AI: saved file; system: spoken this session). */
   readonly replayable = signal<ReadonlySet<string>>(new Set())
   readonly ready = signal(false)
@@ -355,15 +357,34 @@ export class ReaderModel {
   show(place: SavedPlace) {
     const ref: SentenceRef = { paragraph: { chapter: place.chapter, paragraph: place.paragraph }, sentence: place.sentence }
     if (place.bookID !== this.book.id || !this.isValid(ref)) return
-    if (place.chapter !== this.chapter.value) {
-      this.goToChapter(place.chapter, place.paragraph)
+    this.goTo(ref.paragraph)
+    if (settings.showTranslation.value) this.select(ref)
+  }
+
+  /** Goes to a search result like a saved place; «Повернутися» leads to where the reader was before the first jump. */
+  showFound(ref: SentenceRef) {
+    if (!this.isValid(ref)) return
+    if (!this.searchReturn.value) this.searchReturn.value = this.position
+    this.show(this.place(ref))
+  }
+
+  returnFromSearch() {
+    const back = this.searchReturn.value
+    if (!back) return
+    this.searchReturn.value = null
+    this.goTo(back)
+  }
+
+  /** Puts the paragraph at the top of the screen, in this chapter or another one. */
+  private goTo(ref: ParagraphRef) {
+    if (ref.chapter !== this.chapter.value) {
+      this.goToChapter(ref.chapter, ref.paragraph)
     } else {
       this.hideParallelTranslation()
-      this.topParagraph.value = place.paragraph
+      this.topParagraph.value = ref.paragraph
       this.scrollRequest.value++
       this.savePosition()
     }
-    if (settings.showTranslation.value) this.select(ref)
   }
 
   private select(ref: SentenceRef) {

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WordCard } from '../../src/contracts.ts'
 import {
-  CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, fold, highlightForms, initSaved, isSaved, matches, quotes, quotesText,
+  CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, highlightForms, initSaved, isSaved, matches, quotes, quotesText,
   removeAllForTests, removeQuote, removeWordByLemma, saveQuote, saveWord, seedForTests, words, wordsCSV, type SavedPlace,
 } from '../../src/core/saved/saved.ts'
 import { fixtureSavedWords } from '../../src/core/language.ts'
+import { fold } from '../../src/core/util/fold.ts'
 import { closeDB, storageError } from '../../src/core/storage/db.ts'
 
 const card = (word: string, lemma: string, forms = ''): WordCard => ({

@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { effect } from '@preact/signals'
 import { IconButton, NavBar, NoticeBar, ProgressSpinner } from '../components/index.ts'
-import { loadBook } from '../../core/storage/library.ts'
+import { loadBook, markOpened } from '../../core/storage/library.ts'
 import { settings } from '../../core/storage/settings.ts'
 import { highlightForms, words as savedWords } from '../../core/saved/saved.ts'
 import { sameParagraph, type Book } from '../../core/model/book.ts'
@@ -36,6 +36,7 @@ export function ReaderScreen({ bookID }: { bookID: string }) {
         if (!book) openLibrary()
         return
       }
+      void markOpened(book.id)
       created = new ReaderModel(book)
       await created.load()
       if (!cancelled) setModel(created)
@@ -56,7 +57,11 @@ function Reader({ model }: { model: ReaderModel }) {
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<PanelTab>('settings')
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  useReaderShortcuts(model, () => setShortcutsOpen(true))
+  const [searchFocus, setSearchFocus] = useState(0)
+  useReaderShortcuts(model, () => setShortcutsOpen(true), () => {
+    openPanel('contents')
+    setSearchFocus((n) => n + 1)
+  })
   const scroll = useRef({ last: 0, anchor: null as number | null, touching: false, user: false, programmatic: false, idle: 0, save: 0 })
 
   const chapterIndex = model.chapter.value
@@ -292,6 +297,9 @@ function Reader({ model }: { model: ReaderModel }) {
           </>
         } />
       {showTranslation && <ParallelPane model={model} openSettings={() => { aiServicesOpen.value = true }} />}
+      {model.searchReturn.value && (
+        <NoticeBar text="Перейшли до знайденого." actionTitle="Повернутися" onAction={() => model.returnFromSearch()} testID="searchReturnBar" />
+      )}
       {readingError && (
         <NoticeBar text={`Озвучення зупинено: ${readingError}`} actionTitle="Закрити"
           onAction={() => { model.reading.errorMessage.value = null }} />
@@ -321,7 +329,11 @@ function Reader({ model }: { model: ReaderModel }) {
       <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ReaderPanel open={panelOpen} onClose={() => setPanelOpen(false)} tab={panelTab} onTab={setPanelTab}
         book={model.book} chapter={chapterIndex}
-        onSelectChapter={(index) => model.goToChapter(index)}
+        onSelectChapter={(index) => {
+          model.searchReturn.value = null
+          model.goToChapter(index)
+        }}
+        onFound={(ref) => model.showFound(ref)} searchFocus={searchFocus}
         onShowShortcuts={() => {
           setPanelOpen(false)
           setShortcutsOpen(true)

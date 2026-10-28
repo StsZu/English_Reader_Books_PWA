@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Book } from '../../src/core/model/book.ts'
+import type { Book, BookSummary } from '../../src/core/model/book.ts'
 import { DB_NAME, closeDB, getValue, setValue } from '../../src/core/storage/db.ts'
-import { addBook, books, deleteBook, initLibrary, loadBook, resetAll, seedDemoIfNeeded } from '../../src/core/storage/library.ts'
+import {
+  addBook, books, deleteBook, filterBooks, initLibrary, lastOpened, loadBook, markOpened, resetAll, seedDemoIfNeeded, sortBooks,
+} from '../../src/core/storage/library.ts'
 import { clearPosition, loadPosition, savePosition } from '../../src/core/storage/positions.ts'
 import { deleteKey, hasStoredKey, initKey, openAIKey, saveKey } from '../../src/core/storage/key.ts'
 import { settings } from '../../src/core/storage/settings.ts'
@@ -117,6 +119,51 @@ describe('бібліотека', () => {
     expect(settings.fontSize.value).toBe(22)
     await relaunch()
     expect(books.value).toEqual([])
+  })
+})
+
+describe('порядок і пошук бібліотеки (specs/010-library, F1–F3)', () => {
+  it('відкриття записує час; повторний імпорт його зберігає; переживає перезапуск', async () => {
+    const first = book('First')
+    await addBook(first)
+    expect(books.value[0].openedAt).toBeUndefined()
+    await markOpened(first.id, new Date('2026-10-28T10:00:00Z'))
+    expect(books.value[0].openedAt).toBe('2026-10-28T10:00:00.000Z')
+    await addBook({ ...first, title: 'First again' })
+    expect(books.value[0]).toMatchObject({ title: 'First again', openedAt: '2026-10-28T10:00:00.000Z' })
+    await relaunch()
+    expect(books.value[0].openedAt).toBe('2026-10-28T10:00:00.000Z')
+    await markOpened('missing')
+    expect(books.value.map((b) => b.id)).toEqual([first.id])
+  })
+
+  const summary = (title: string, author: string, importedAt: string, openedAt?: string): BookSummary =>
+    ({ id: title, title, author, format: 'txt', importedAt, openedAt, chapterCount: 1, sentenceCount: 1 })
+  const list = [
+    summary('Émile', 'Rousseau', '2026-10-03T00:00:00Z'),
+    summary('Book 10', '', '2026-10-02T00:00:00Z', '2026-10-27T00:00:00Z'),
+    summary('book 9', 'Łukasz', '2026-10-01T00:00:00Z', '2026-10-28T00:00:00Z'),
+    summary('Alice', 'Carroll', '2026-10-04T00:00:00Z'),
+  ]
+  const titles = (items: BookSummary[]) => items.map((b) => b.title)
+
+  it('сортування: нещодавні (без відкриття — за імпортом), додані, назва, автор', () => {
+    expect(titles(sortBooks(list, 'recent'))).toEqual(['book 9', 'Book 10', 'Alice', 'Émile'])
+    expect(titles(sortBooks(list, 'added'))).toEqual(['Alice', 'Émile', 'Book 10', 'book 9'])
+    expect(titles(sortBooks(list, 'title'))).toEqual(['Alice', 'book 9', 'Book 10', 'Émile'])
+    expect(titles(sortBooks(list, 'author'))).toEqual(['Alice', 'book 9', 'Émile', 'Book 10'])
+    expect(titles(sortBooks(list, 'unknown'))).toEqual(titles(sortBooks(list, 'recent')))
+    expect(titles(list)).toEqual(['Émile', 'Book 10', 'book 9', 'Alice'])
+  })
+
+  it('пошук за назвою й автором без регістру й діакритики; «Продовжити» — остання відкрита', () => {
+    expect(titles(filterBooks(list, 'emile'))).toEqual(['Émile'])
+    expect(titles(filterBooks(list, ' lukasz '))).toEqual(['book 9'])
+    expect(titles(filterBooks(list, 'BOOK'))).toEqual(['Book 10', 'book 9'])
+    expect(filterBooks(list, '  ')).toBe(list)
+    expect(filterBooks(list, 'xyz')).toEqual([])
+    expect(lastOpened(list)?.title).toBe('book 9')
+    expect(lastOpened([list[0], list[3]])).toBeNull()
   })
 })
 

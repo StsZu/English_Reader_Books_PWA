@@ -5,6 +5,7 @@ import { fixtureSavedWords, fixtureSentence } from '../language.ts'
 import type { WordCard } from '../../contracts.ts'
 import type { ParagraphRef, SentenceRef } from '../model/book.ts'
 import { getValue, setValue, storageError, storageErrorText } from '../storage/db.ts'
+import { fold } from '../util/fold.ts'
 
 export interface SavedPlace {
   bookID: string
@@ -171,14 +172,6 @@ export async function saveQuote(text: string, translation: string, apple: boolea
 export async function removeQuote(id: string): Promise<void> {
   quotes.value = quotes.value.filter((q) => q.id !== id)
   await persist()
-}
-
-/** Letters that NFD keeps whole, with their Latin base for search. */
-const baseLetters: Record<string, string> = { ł: 'l', đ: 'd', ø: 'o', ß: 'ss', æ: 'ae', œ: 'oe' }
-
-/** Case- and diacritic-insensitive form for search («lodz» finds «Łódź»). */
-export function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[łđøßæœ]/gu, (letter) => baseLetters[letter])
 }
 
 export function matches(query: string, fields: string[]): boolean {

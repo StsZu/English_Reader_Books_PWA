@@ -32,6 +32,8 @@ export interface BookSummary {
   author: string
   format: BookFormat
   importedAt: string
+  /** When the book was last opened in the reader; missing in older indexes (specs/010-library, F1). */
+  openedAt?: string
   chapterCount: number
   sentenceCount: number
 }

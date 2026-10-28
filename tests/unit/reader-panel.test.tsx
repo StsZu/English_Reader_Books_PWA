@@ -3,7 +3,7 @@ import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { ReaderPanel, type ReaderPanelTab } from '../../src/ui/reader/panel/ReaderPanel.tsx'
 import { allDictionaries, dictionaryOrder, defaultEnabledDictionaries, resetAllSettings, settings } from '../../src/core/storage/settings.ts'
-import type { Book } from '../../src/core/model/book.ts'
+import type { Book, SentenceRef } from '../../src/core/model/book.ts'
 
 const book: Book = {
   id: 'B1', title: 'Demo', author: '', format: 'md', importedAt: new Date(0).toISOString(),
@@ -15,11 +15,15 @@ const book: Book = {
 
 let root: HTMLDivElement
 
-function mount(tab: ReaderPanelTab = 'settings', handlers: Partial<{ onClose: () => void; onSelectChapter: (i: number) => void }> = {}) {
+function mount(
+  tab: ReaderPanelTab = 'settings',
+  handlers: Partial<{ onClose: () => void; onSelectChapter: (i: number) => void; onFound: (ref: SentenceRef) => void }> = {},
+) {
   act(() => {
     render(
       <ReaderPanel open tab={tab} onTab={() => {}} book={book} chapter={0}
-        onClose={handlers.onClose ?? (() => {})} onSelectChapter={handlers.onSelectChapter ?? (() => {})} onOpenPlace={() => {}} onShowShortcuts={() => {}} />,
+        onClose={handlers.onClose ?? (() => {})} onSelectChapter={handlers.onSelectChapter ?? (() => {})} onOpenPlace={() => {}} onShowShortcuts={() => {}}
+        onFound={handlers.onFound ?? (() => {})} searchFocus={0} />,
       root,
     )
   })
@@ -147,6 +151,28 @@ describe('ReaderPanel', () => {
     click('chapter-1')
     expect(onSelectChapter).toHaveBeenCalledWith(1)
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('searches the book in the contents tab: a result goes to its sentence and closes the panel (specs/010, F4)', () => {
+    vi.useFakeTimers()
+    const onClose = vi.fn()
+    const onFound = vi.fn()
+    mount('contents', { onClose, onFound })
+    const field = byID('bookSearch') as HTMLInputElement
+    act(() => {
+      field.value = 'TWO'
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(byID('chapter-0')).not.toBeNull()
+    act(() => { vi.advanceTimersByTime(250) })
+    expect(byID('chapter-0')).toBeNull()
+    expect(byID('searchResult-0')!.textContent).toBe('The Red-Headed LeagueTwo.')
+    expect(byID('searchResult-0')!.querySelector('mark')!.textContent).toBe('Two')
+    expect(byID('searchResult-1')).toBeNull()
+    click('searchResult-0')
+    expect(onFound).toHaveBeenCalledWith({ paragraph: { chapter: 1, paragraph: 0 }, sentence: 0 })
+    expect(onClose).toHaveBeenCalled()
+    vi.useRealTimers()
   })
 
   it('closes with the cross', () => {

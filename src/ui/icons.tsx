@@ -1,6 +1,6 @@
 // SF Symbols used by the Swift app → nearest Lucide icons (V-06, plan.md → «Іконки»).
 import {
-  ALargeSmall, ArrowRight, AudioLines, Bookmark, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  ALargeSmall, ArrowRight, ArrowUpDown, AudioLines, Bookmark, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   CircleArrowRight, CircleCheck, CircleHelp, CircleX, Copy, Ellipsis, ExternalLink, GraduationCap, GripVertical,
   Headphones, Keyboard, Languages, Library, LibraryBig, List, Mic, Minus, Pause, Play, Plus, RotateCcw, RotateCw, Search, Settings, Share,
   SkipForward, Sparkles, Square, TriangleAlert, Trash2, Type, Volume2, X, type LucideIcon,
@@ -35,6 +35,7 @@ const icons = {
   'square.and.arrow.up': Share,
   'arrow.right.circle': CircleArrowRight,
   'arrow.right': ArrowRight,
+  'arrow.up.arrow.down': ArrowUpDown,
   mic: Mic,
   magnifyingglass: Search,
   book: BookOpen,

@@ -494,6 +494,29 @@ describe('вимова речення', () => {
 
 // MARK: - Settings defaults (testBookFontsAreInstalledAndSettingsHaveCurrentDefaults, settings part)
 
+describe('пошук у книжці (specs/010-library, F4–F5)', () => {
+  it('перехід до знайденого вибирає речення; «Повернутися» — до місця перед першим переходом', async () => {
+    const book = translationTestBook()
+    book.chapters.push({ title: 'Two', paragraphs: [{ kind: 'text', sentences: ['Far away.'] }, { kind: 'text', sentences: ['Further.'] }] })
+    const model = new ReaderModel(book, { provider: () => new RecordingProvider() })
+    model.topParagraph.value = 1
+    model.showFound(ref({ chapter: 1, paragraph: 1 }, 0))
+    expect(model.chapter.value).toBe(1)
+    expect(model.topParagraph.value).toBe(1)
+    expect(model.activeSentence.value).toEqual(ref({ chapter: 1, paragraph: 1 }, 0))
+    expect(model.searchReturn.value).toEqual(p1)
+    model.showFound(ref({ chapter: 1, paragraph: 0 }, 0))
+    expect(model.searchReturn.value).toEqual(p1)
+    model.returnFromSearch()
+    expect(model.searchReturn.value).toBeNull()
+    expect(model.chapter.value).toBe(0)
+    expect(model.topParagraph.value).toBe(1)
+    expect(model.activeSentence.value).toBeNull()
+    model.showFound(ref({ chapter: 5, paragraph: 0 }, 0))
+    expect(model.searchReturn.value).toBeNull()
+  })
+})
+
 describe('типові налаштування', () => {
   it('testBookFontsAreInstalledAndSettingsHaveCurrentDefaults', async () => {
     const { isExpanded, toggleSection } = await import('../../src/core/storage/settings.ts')

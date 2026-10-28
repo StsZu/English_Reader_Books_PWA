@@ -17,6 +17,7 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: '↑ / ↓', action: 'Попереднє / наступне речення' },
   { keys: 'Option + ← / →', action: 'Попереднє / наступне слово речення' },
   { keys: 'Enter', action: 'Картка вибраного слова; без слова — прослухати речення' },
+  { keys: '⌘F', action: 'Пошук у книжці' },
   { keys: '?', action: 'Цей список' },
   { keys: 'Esc', action: 'Закрити аркуш, меню чи панель; прибрати вибір слова' },
 ]
@@ -28,8 +29,17 @@ const isTextInput = (target: EventTarget | null) =>
 /** A sheet, dialog, side panel or menu keeps its own keys. */
 const overlayOpen = () => !!document.querySelector('[aria-modal="true"], [role="menu"]')
 
+/** ⌘F also works from the open reader panel and its search field, not from other sheets. */
+const otherOverlayOpen = () => !!document.querySelector('[aria-modal="true"]:not([data-testid="readerPanel"]), [role="menu"]')
+
 /** The action for a key press in the reader, or null when the key is not a shortcut here. */
-export function readerShortcut(event: KeyboardEvent, model: ReaderModel, showHelp: () => void): (() => void) | null {
+export function readerShortcut(
+  event: KeyboardEvent, model: ReaderModel, showHelp: () => void, showSearch: () => void = () => {},
+): (() => void) | null {
+  if (event.code === 'KeyF' && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+    // Search in the book (specs/010-library, F4) instead of the browser's search on the page.
+    return otherOverlayOpen() ? null : showSearch
+  }
   if (event.metaKey || event.ctrlKey || isTextInput(event.target) || overlayOpen()) return null
   const target = event.target instanceof HTMLElement ? event.target : null
   const arrow = event.code === 'ArrowLeft' || event.code === 'ArrowRight'
@@ -75,11 +85,11 @@ export function readerShortcut(event: KeyboardEvent, model: ReaderModel, showHel
   return event.key === '?' ? showHelp : null
 }
 
-export function useReaderShortcuts(model: ReaderModel, showHelp: () => void) {
+export function useReaderShortcuts(model: ReaderModel, showHelp: () => void, showSearch: () => void) {
   useEffect(() => {
     let spaceHandled = false
     const onKey = (event: KeyboardEvent) => {
-      const action = readerShortcut(event, model, showHelp)
+      const action = readerShortcut(event, model, showHelp, showSearch)
       if (!action) return
       // Also keeps Space from pressing a focused button (a second toggle) and from scrolling the page.
       event.preventDefault()
