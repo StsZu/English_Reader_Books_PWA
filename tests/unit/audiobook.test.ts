@@ -195,7 +195,7 @@ describe('AudiobookPlayer', () => {
     expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 12, rate: 1 })
   })
 
-  it('after a pause starts 0.3 s earlier, 3 s after a long pause or reopening; a seek starts exactly there', async () => {
+  it('after a pause starts 0.2 s earlier, 3 s after a long pause or reopening; a seek starts exactly there', async () => {
     const { bookID, element, player } = await playerWith(['01.mp3'])
     player.play()
     await flush()
@@ -207,20 +207,20 @@ describe('AudiobookPlayer', () => {
     await flush()
     expect((await loadAudioPosition(bookID))?.time).toBe(30.4)
     player.play()
-    expect(element.currentTime).toBeCloseTo(30.1)
-    expect(player.time.value).toBeCloseTo(30.1)
+    expect(element.currentTime).toBeCloseTo(30.2)
+    expect(player.time.value).toBeCloseTo(30.2)
     await flush()
 
     // A second play while playing does not go back again.
     player.play()
-    expect(element.currentTime).toBeCloseTo(30.1)
+    expect(element.currentTime).toBeCloseTo(30.2)
 
     player.pause()
     const now = Date.now()
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now + LONG_PAUSE_MS)
     player.play()
     clock.mockRestore()
-    expect(element.currentTime).toBeCloseTo(27.1)
+    expect(element.currentTime).toBeCloseTo(27.2)
     await flush()
 
     player.pause()
@@ -250,7 +250,7 @@ describe('AudiobookPlayer', () => {
     const { element, player } = await playerWith(['01.mp3'])
     player.play()
     await flush()
-    element.advance(0.2)
+    element.advance(0.1)
     player.pause()
     player.play()
     expect(element.currentTime).toBe(0)
