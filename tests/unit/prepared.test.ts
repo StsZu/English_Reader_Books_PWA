@@ -9,7 +9,8 @@ import {
 import { importPrepared } from '../../src/core/prepared/import.ts'
 import { listTracks, loadSync } from '../../src/core/audiobook/store.ts'
 import { TranslationStore } from '../../src/core/ai/translation.ts'
-import { books, loadBook, resetAll } from '../../src/core/storage/library.ts'
+import { books, loadBook, removeOrphanTranslations, resetAll } from '../../src/core/storage/library.ts'
+import { Sha256, sha256File } from '../../src/core/util/sha256.ts'
 
 const chapters: Chapter[] = [{
   title: 'One',
@@ -133,5 +134,36 @@ describe('importPrepared', () => {
     pkg.edition = '0'
     await expect(importPrepared([await packageFile(pkg), file('01.mp3', audio)])).rejects.toThrow('Текст не збігається з редакцією')
     expect(books.value).toEqual([])
+  })
+})
+
+describe('sha256', () => {
+  const bytes = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 31 + 7) & 255)
+
+  it('matches node:crypto at every padding boundary', () => {
+    for (const n of [0, 1, 55, 56, 63, 64, 65, 119, 120, 1000]) {
+      expect(new Sha256().update(bytes(n)).hex()).toBe(sha(bytes(n)))
+    }
+  })
+
+  it('gives the same hash when the file is read in uneven parts', async () => {
+    const data = bytes(300_001)
+    expect(await sha256File(file('a.mp3', data), 4099)).toBe(sha(data))
+  })
+})
+
+describe('removeOrphanTranslations', () => {
+  beforeEach(async () => {
+    await resetAll()
+  })
+
+  it('removes translations of a book that never reached the library and keeps the rest', async () => {
+    const { summary } = await importPrepared([
+      file('test.reader.json', JSON.stringify(await makePackage()), 'application/json'), file('01.mp3', audio),
+    ])
+    await new TranslationStore('lost').saveForKey(['x'], '0-0')
+    await removeOrphanTranslations(books.value.map((b) => b.id))
+    expect(await new TranslationStore('lost').translationForKey('0-0')).toBeUndefined()
+    expect(await new TranslationStore(summary.id).translationForKey('0-0')).toEqual(['Один'])
   })
 })

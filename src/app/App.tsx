@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { effect } from '@preact/signals'
 import { aiServicesOpen, closeTraining, route, trainingOpen } from './router.ts'
 import { testFlags } from './test-mode.ts'
-import { addBook, books, initLibrary, lastError, resetAll, seedDemoIfNeeded } from '../core/storage/library.ts'
+import { addBook, books, initLibrary, lastError, removeOrphanTranslations, resetAll, seedDemoIfNeeded } from '../core/storage/library.ts'
 import { initKey } from '../core/storage/key.ts'
 import { initSaved, removeAllForTests, seedForTests } from '../core/saved/saved.ts'
 import { requestPersistence, storageError } from '../core/storage/db.ts'
@@ -39,6 +39,7 @@ async function start() {
   if (__TEST_MODE__ && testFlags.voice) settings.voiceEngine.value = testFlags.voice
   await seedDemoIfNeeded(loadDemo)
   await removeOrphanAudio(books.value.map((b) => b.id)).catch(() => {})
+  await removeOrphanTranslations(books.value.map((b) => b.id)).catch(() => {})
   if (__TEST_MODE__ && testFlags.importPath) {
     try {
       const response = await fetch(testFlags.importPath)

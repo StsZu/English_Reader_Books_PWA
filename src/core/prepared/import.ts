@@ -5,6 +5,7 @@ import { putTracksInOrder, saveSync } from '../audiobook/store.ts'
 import { TranslationStore } from '../ai/translation.ts'
 import { addBook, deleteBook } from '../storage/library.ts'
 import { maxFileSize } from '../import/importer.ts'
+import { sha256File } from '../util/sha256.ts'
 import { PACKAGE_SUFFIX, validatePackage, type ReaderPackage, type StoredSync } from './package.ts'
 
 export const isPackageFile = (file: { name: string }) => file.name.toLowerCase().endsWith(PACKAGE_SUFFIX)
@@ -14,11 +15,6 @@ export interface PreparedImport {
   /** Sentences without matching audio: they are never highlighted. */
   untimed: number
   sentences: number
-}
-
-async function fileHash(file: Blob): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export async function readPackage(file: File): Promise<ReaderPackage> {
@@ -42,7 +38,7 @@ export async function matchTracks(pkg: ReaderPackage, files: File[]): Promise<Fi
   for (const track of pkg.tracks) {
     const file = files.find((f) => f.name === track.name)
     if (!file) missing.push(track.name)
-    else if (file.size !== track.size || await fileHash(file) !== track.sha256) different.push(track.name)
+    else if (file.size !== track.size || await sha256File(file) !== track.sha256) different.push(track.name)
     else matched.push(file)
   }
   if (missing.length) throw new Error(`Книжку не імпортовано. Виберіть разом з нею аудіофайли: ${missing.join(', ')}.`)

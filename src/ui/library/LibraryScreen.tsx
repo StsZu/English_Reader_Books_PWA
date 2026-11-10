@@ -9,7 +9,7 @@ import {
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import { importFile } from '../../core/import/importer.ts'
-import { importPrepared, isPackageFile } from '../../core/prepared/import.ts'
+import { importPrepared } from '../../core/prepared/import.ts'
 import { AUDIO_ACCEPT } from '../../core/audiobook/store.ts'
 import type { SkippedContent } from '../../core/import/epub.ts'
 import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } from '../../core/saved/saved.ts'
@@ -22,8 +22,9 @@ import {
 import { SavedList } from '../saved/SavedList.tsx'
 import './library.css'
 
-// A prepared book (specs/013-prepared-book) is `.reader.json` chosen together with its audio files.
-const ACCEPT = `.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown,.json,application/json,${AUDIO_ACCEPT}`
+const ACCEPT = '.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown'
+/** A prepared book (specs/013-prepared-book): `.reader.json` chosen together with its audio files. */
+const PREPARED_ACCEPT = `.json,application/json,${AUDIO_ACCEPT}`
 
 export function LibraryScreen() {
   const [importing, setImporting] = useState(false)
@@ -37,6 +38,7 @@ export function LibraryScreen() {
   const [query, setQuery] = useState('')
   const [sortMenu, setSortMenu] = useState<{ x: number; y: number } | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  const preparedInput = useRef<HTMLInputElement>(null)
   const list = books.value
   const sort = settings.librarySort.value
   const shown = filterBooks(sortBooks(list, sort), query)
@@ -46,17 +48,11 @@ export function LibraryScreen() {
 
   async function onFile(event: Event) {
     const target = event.currentTarget as HTMLInputElement
-    const files = [...(target.files ?? [])]
-    const file = files[0]
+    const file = target.files?.[0]
     target.value = ''
     if (!file) return
     setImporting(true)
     try {
-      if (files.some(isPackageFile)) {
-        const result = await importPrepared(files)
-        openBook(result.summary.id)
-        return
-      }
       const unreadable: string[] = []
       const left: SkippedContent = { images: 0, notes: 0, pages: 0 }
       const summary = await addBook(await importFile(file, unreadable, left))
@@ -64,6 +60,22 @@ export function LibraryScreen() {
       if (unreadable.length > 0) setPartial({ id: summary.id, chapters: summary.chapterCount, unreadable, skipped })
       else if (skipped) setTextOnly({ id: summary.id, skipped })
       else openBook(summary.id)
+    } catch (error) {
+      lastError.value = errorMessage(error)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function onPrepared(event: Event) {
+    const target = event.currentTarget as HTMLInputElement
+    const files = [...(target.files ?? [])]
+    target.value = ''
+    if (!files.length) return
+    setImporting(true)
+    try {
+      const result = await importPrepared(files)
+      openBook(result.summary.id)
     } catch (error) {
       lastError.value = errorMessage(error)
     } finally {
@@ -90,14 +102,21 @@ export function LibraryScreen() {
             <IconButton icon="bookmark" label="Збережене" testID="savedButton" onClick={() => setShowSaved(true)} />
             {importing
               ? <span class="library-importing" data-testid="importButton" aria-label="Імпорт" aria-busy="true"><ProgressSpinner size="small" label="Імпорт" /></span>
-              : <IconButton icon="plus" label="Імпорт" testID="importButton" onClick={() => input.current?.click()} />}
+              : (
+                <>
+                  <IconButton icon="headphones" label="Книжка з перекладом і аудіо" testID="importPreparedButton"
+                    onClick={() => preparedInput.current?.click()} />
+                  <IconButton icon="plus" label="Імпорт" testID="importButton" onClick={() => input.current?.click()} />
+                </>
+              )}
           </>
         }
       />
       {pendingUpdate.value && (
         <NoticeBar text="Доступна нова версія." actionTitle="Оновити" onAction={pendingUpdate.value} testID="updateBar" />
       )}
-      <input ref={input} type="file" accept={ACCEPT} multiple class="library-input" data-testid="importInput" onChange={onFile} />
+      <input ref={input} type="file" accept={ACCEPT} class="library-input" data-testid="importInput" onChange={onFile} />
+      <input ref={preparedInput} type="file" accept={PREPARED_ACCEPT} multiple class="library-input" data-testid="importPreparedInput" onChange={onPrepared} />
       <main class="library-scroll">
         {list.length === 0 && (
           <div class="library-empty">

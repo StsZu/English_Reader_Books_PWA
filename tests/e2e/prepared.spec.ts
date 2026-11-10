@@ -57,7 +57,7 @@ const sentence = (page: Page, paragraph: number, s: number) => page.locator(`[da
 test('підготовлена книжка: імпорт з аудіо, підсвічування речення, яке звучить, і готовий переклад', async ({ page }) => {
   await page.route('https://api.openai.com/**', (route) => route.abort())
   await page.goto('./?reset')
-  await page.getByTestId('importInput').setInputFiles(await packageFiles())
+  await page.getByTestId('importPreparedInput').setInputFiles(await packageFiles())
   await expect(page.getByTestId('readerScroll')).toBeVisible()
   await expect(page.getByTestId('audioBar')).toBeVisible()
   await expect(page.locator('.s.active')).toHaveCount(0)
@@ -83,6 +83,6 @@ test('підготовлена книжка: імпорт з аудіо, під�
 test('підготовлена книжка без аудіофайла не імпортується', async ({ page }) => {
   await page.goto('./?reset')
   const [pkg] = await packageFiles()
-  await page.getByTestId('importInput').setInputFiles([pkg])
+  await page.getByTestId('importPreparedInput').setInputFiles([pkg])
   await expect(page.getByText(/Виберіть разом з нею аудіофайли: synthetic\.wav/)).toBeVisible()
 })
