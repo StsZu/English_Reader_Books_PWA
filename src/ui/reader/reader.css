@@ -228,9 +228,28 @@
 }
 
 .playback-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
   color: var(--secondary-label);
   white-space: nowrap;
+}
+
+/* «Слухати / Пауза» and the loading indicator keep their place in every state (specs/012-player-button). */
+.playback-toggle,
+.playback-loading,
+.audio-loading {
+  flex: none;
+}
+
+.audio-loading {
+  display: inline-flex;
+}
+
+.playback-loading.is-hidden,
+.audio-loading.is-hidden {
+  visibility: hidden;
 }
 
 /* MARK: Audiobook bar (specs/002-audio-player, stage A) */
@@ -429,6 +448,7 @@
   .audio-controls { gap: 8px; }
   .scrubber-time { min-width: 44px; }
   .pane-row { padding: 0 12px; }
+  .playback-loading-title { display: none; }
 }
 
 /* MARK: Keyboard shortcuts sheet */

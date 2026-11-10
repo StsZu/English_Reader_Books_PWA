@@ -1,11 +1,21 @@
 // Port of ReaderView.swift → PlaybackBar and ChapterNavigation.
-import { Button, IconButton, ProgressSpinner } from '../components/index.ts'
+import { Button, IconButton, ProgressSpinner, cx } from '../components/index.ts'
+import type { IconName } from '../icons.tsx'
 import { AudioBar } from './AudioBar.tsx'
 import type { ReaderModel } from './model.ts'
 
 export function PlaybackBar({ model }: { model: ReaderModel }) {
   if (model.audioMode) return <AudioBar model={model} />
   return <VoiceBar model={model} />
+}
+
+const VOICE_TITLES = ['Слухати', 'Пауза', 'Продовжити']
+
+const LISTEN: Record<'idle' | 'loading' | 'playing' | 'paused', { title: string; icon: IconName; testID: string }> = {
+  idle: { title: 'Слухати', icon: 'play.fill', testID: 'playButton' },
+  loading: { title: 'Пауза', icon: 'pause.fill', testID: 'pauseButton' },
+  playing: { title: 'Пауза', icon: 'pause.fill', testID: 'pauseButton' },
+  paused: { title: 'Продовжити', icon: 'play.fill', testID: 'resumeButton' },
 }
 
 function VoiceBar({ model }: { model: ReaderModel }) {
@@ -18,21 +28,16 @@ function VoiceBar({ model }: { model: ReaderModel }) {
     playing: 'Відтворення',
     paused: 'Пауза',
   }[state]
+  const listen = LISTEN[state]
   return (
     <footer class="playback-bar">
-      {state === 'idle' && (
-        <Button variant="bordered" icon="play.fill" testID="playButton" onClick={() => model.toggleListening()}>Слухати</Button>
-      )}
-      {(state === 'loading' || state === 'playing') && (
-        <Button variant="bordered" icon="pause.fill" testID="pauseButton" onClick={() => model.toggleListening()}>Пауза</Button>
-      )}
-      {state === 'paused' && (
-        <Button variant="bordered" icon="play.fill" testID="resumeButton" onClick={() => model.toggleListening()}>Продовжити</Button>
-      )}
+      {/* One button for all states: the panel does not move and focus stays on it (specs/012-player-button). */}
+      <Button variant="bordered" class="playback-toggle" icon={listen.icon} testID={listen.testID} reserve={VOICE_TITLES}
+        onClick={() => model.toggleListening()}>{listen.title}</Button>
       <Button variant="bordered" icon="stop.fill" disabled={state === 'idle'} testID="stopButton" onClick={() => reading.stop()}>Стоп</Button>
-      {state === 'loading' && (
-        <span class="playback-loading"><ProgressSpinner size="small" /><span>Готую аудіо…</span></span>
-      )}
+      <span class={cx('playback-loading', state !== 'loading' && 'is-hidden')} aria-hidden={state !== 'loading'}>
+        <ProgressSpinner size="small" /><span class="playback-loading-title">Готую аудіо…</span>
+      </span>
       <span class="pane-spacer" />
       <span class="playback-status" data-testid="playbackStatus">{status}</span>
       <IconButton icon="headphones" label={hasAudio ? 'Аудіокнига' : 'Додати аудіокнигу'} testID="audiobookMode" onClick={() => {

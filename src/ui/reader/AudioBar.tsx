@@ -4,7 +4,7 @@ import { useRef, useState } from 'preact/hooks'
 import type { JSX } from 'preact'
 import { RATES, SKIP_SECONDS } from '../../core/audiobook/player.ts'
 import { formatNumber, formatTime } from '../../core/util/format.ts'
-import { Button, IconButton, MenuPopover, ProgressSpinner } from '../components/index.ts'
+import { Button, IconButton, MenuPopover, ProgressSpinner, cx } from '../components/index.ts'
 import { Icon } from '../icons.tsx'
 import type { ReaderModel } from './model.ts'
 
@@ -74,6 +74,8 @@ function SkipButton({ back = false, onClick }: { back?: boolean; onClick: () => 
   )
 }
 
+const AUDIO_TITLES = ['Слухати', 'Пауза']
+
 export function AudioBar({ model }: { model: ReaderModel }) {
   const player = model.audiobook
   const state = player.state.value
@@ -91,11 +93,10 @@ export function AudioBar({ model }: { model: ReaderModel }) {
       <Scrubber time={player.time.value} duration={player.duration.value} onSeek={(t) => player.seek(t)} />
       <div class="audio-controls">
         <SkipButton back onClick={() => player.skip(-SKIP_SECONDS)} />
-        {playing
-          ? <Button variant="bordered" icon="pause.fill" testID="audioPause" onClick={() => model.toggleListening()}>Пауза</Button>
-          : <Button variant="bordered" icon="play.fill" testID="audioPlay" onClick={() => model.toggleListening()}>Слухати</Button>}
+        <Button variant="bordered" class="playback-toggle" icon={playing ? 'pause.fill' : 'play.fill'} testID={playing ? 'audioPause' : 'audioPlay'}
+          reserve={AUDIO_TITLES} onClick={() => model.toggleListening()}>{playing ? 'Пауза' : 'Слухати'}</Button>
         <SkipButton onClick={() => player.skip(SKIP_SECONDS)} />
-        {state === 'loading' && <ProgressSpinner size="small" />}
+        <span class={cx('audio-loading', state !== 'loading' && 'is-hidden')} aria-hidden={state !== 'loading'}><ProgressSpinner size="small" /></span>
         <span class="pane-spacer" />
         <button type="button" class="audio-chip" onClick={() => { model.audioSheetOpen.value = true }} data-testid="audioTrackButton">
           {tracks.length > 1 ? `Доріжка ${player.track.value + 1} з ${tracks.length}` : 'Аудіокнига'}

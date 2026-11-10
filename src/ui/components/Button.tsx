@@ -19,11 +19,13 @@ export interface ButtonProps {
   class?: string
   type?: 'button' | 'submit'
   fullWidth?: boolean
+  /** Other titles this button switches to: the button keeps the width of the longest one (specs/012-player-button). */
+  reserve?: string[]
 }
 
 export function Button({
   children, icon, labelStyle = 'titleAndIcon', variant = 'plain', size = 'regular', disabled, selected, onClick,
-  ariaLabel, testID, class: className, type = 'button', fullWidth,
+  ariaLabel, testID, class: className, type = 'button', fullWidth, reserve,
 }: ButtonProps) {
   const showIcon = icon && labelStyle !== 'titleOnly'
   const showTitle = children !== undefined && labelStyle !== 'iconOnly'
@@ -38,7 +40,14 @@ export function Button({
       data-testid={testID}
     >
       {showIcon && <Icon name={icon} size={size === 'small' ? 16 : 19} />}
-      {showTitle && <span class="btn-title">{children}</span>}
+      {showTitle && (reserve
+        ? (
+          <span class="btn-title btn-title-stack">
+            <span>{children}</span>
+            {reserve.map((title) => <span key={title} class="btn-title-reserve" aria-hidden="true">{title}</span>)}
+          </span>
+        )
+        : <span class="btn-title">{children}</span>)}
     </button>
   )
 }

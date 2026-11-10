@@ -266,6 +266,37 @@ test('читання вголос: Слухати → Пауза → Продо�
   await expect(page.getByTestId('playbackStatus')).toContainText('Розділ 1 з 2')
 })
 
+test('кнопка «Слухати / Пауза / Продовжити» не змінює розмір і не зсуває панель; фокус лишається на ній', async ({ page }) => {
+  await openDemo(page, 'testSpeech&voice=openAI')
+  const toggle = page.locator('.playback-bar .playback-toggle')
+  const geometry = async () => Promise.all([
+    toggle.boundingBox(),
+    page.getByTestId('stopButton').boundingBox(),
+    page.getByTestId('audiobookMode').boundingBox(),
+    page.locator('.playback-bar').boundingBox(),
+  ])
+  const before = await geometry()
+  const same = async () => {
+    const now = await geometry()
+    now.forEach((box, i) => {
+      for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(box![key] - before[i]![key])).toBeLessThanOrEqual(1)
+    })
+  }
+  await toggle.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('pauseButton')).toBeVisible()
+  await same()
+  await expect(page.getByTestId('pauseButton')).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('resumeButton')).toBeVisible()
+  await same()
+  await expect(page.getByTestId('resumeButton')).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Продовжити', exact: true })).toBeVisible()
+  await page.getByTestId('stopButton').click()
+  await expect(page.getByTestId('playButton')).toBeVisible()
+  await same()
+})
+
 test('читання вголос з вибраного речення; утримання речення посеред читання не зависає', async ({ page }) => {
   await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
   await word(page, w2).click()

@@ -163,6 +163,32 @@ test('аудіокнига: перехід на іншу доріжку під �
   await expect(page.getByTestId('audioTime')).not.toHaveText('0:00', { timeout: 5_000 })
 })
 
+test('аудіокнига: кнопка «Слухати / Пауза» не змінює розмір і не зсуває панель', async ({ page }) => {
+  await openDemo(page)
+  await addFiles(page)
+  await page.getByTestId('audioSheetDone').click()
+  await expect(page.getByTestId('audioSheet')).toHaveCount(0)
+  const geometry = async () => Promise.all([
+    page.locator('.audio-bar .playback-toggle').boundingBox(),
+    page.getByTestId('audioForward').boundingBox(),
+    page.getByTestId('audioTrackButton').boundingBox(),
+    page.getByTestId('audioBar').boundingBox(),
+  ])
+  const before = await geometry()
+  const same = async () => {
+    const now = await geometry()
+    now.forEach((box, i) => {
+      for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(box![key] - before[i]![key])).toBeLessThanOrEqual(1)
+    })
+  }
+  await page.getByTestId('audioPlay').click()
+  await expect(page.getByTestId('audioPause')).toBeVisible()
+  await same()
+  await page.getByTestId('audioPause').click()
+  await expect(page.getByTestId('audioPlay')).toBeVisible()
+  await same()
+})
+
 test('аудіокнига з клавіатури: пробіл, стрілки, доріжки, швидкість, перемикання, список клавіш', async ({ page }) => {
   await openDemo(page)
   await addFiles(page)

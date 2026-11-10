@@ -108,6 +108,21 @@
   text-overflow: ellipsis;
 }
 
+/* All titles of a switching button in one grid cell: the width is that of the longest (specs/012-player-button). */
+.btn-title-stack {
+  display: inline-grid;
+  overflow: visible;
+}
+
+.btn-title-stack > * {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+
+.btn-title-reserve {
+  visibility: hidden;
+}
+
 .icon-btn {
   display: inline-flex;
   align-items: center;
