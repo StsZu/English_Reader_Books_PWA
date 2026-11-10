@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "golden": "GOLDEN=1 vitest run tests/golden",
+    "prepared-book": "esbuild scripts/make-reader-book.ts --bundle --platform=node --format=esm --outfile=build/make-reader-book.mjs --log-level=warning --define:__TEST_MODE__=false && node build/make-reader-book.mjs",
     "size": "node scripts/size.mjs",
     "sibling-diff": "node scripts/sibling-diff.mjs",
     "check": "npm run build && sh scripts/check-secrets.sh && node scripts/size.mjs"

@@ -9,6 +9,8 @@ import {
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import { importFile } from '../../core/import/importer.ts'
+import { importPrepared, isPackageFile } from '../../core/prepared/import.ts'
+import { AUDIO_ACCEPT } from '../../core/audiobook/store.ts'
 import type { SkippedContent } from '../../core/import/epub.ts'
 import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } from '../../core/saved/saved.ts'
 import { formatLabel, type BookSummary } from '../../core/model/book.ts'
@@ -20,7 +22,8 @@ import {
 import { SavedList } from '../saved/SavedList.tsx'
 import './library.css'
 
-const ACCEPT = '.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown'
+// A prepared book (specs/013-prepared-book) is `.reader.json` chosen together with its audio files.
+const ACCEPT = `.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown,.json,application/json,${AUDIO_ACCEPT}`
 
 export function LibraryScreen() {
   const [importing, setImporting] = useState(false)
@@ -43,11 +46,17 @@ export function LibraryScreen() {
 
   async function onFile(event: Event) {
     const target = event.currentTarget as HTMLInputElement
-    const file = target.files?.[0]
+    const files = [...(target.files ?? [])]
+    const file = files[0]
     target.value = ''
     if (!file) return
     setImporting(true)
     try {
+      if (files.some(isPackageFile)) {
+        const result = await importPrepared(files)
+        openBook(result.summary.id)
+        return
+      }
       const unreadable: string[] = []
       const left: SkippedContent = { images: 0, notes: 0, pages: 0 }
       const summary = await addBook(await importFile(file, unreadable, left))
@@ -88,7 +97,7 @@ export function LibraryScreen() {
       {pendingUpdate.value && (
         <NoticeBar text="Доступна нова версія." actionTitle="Оновити" onAction={pendingUpdate.value} testID="updateBar" />
       )}
-      <input ref={input} type="file" accept={ACCEPT} class="library-input" data-testid="importInput" onChange={onFile} />
+      <input ref={input} type="file" accept={ACCEPT} multiple class="library-input" data-testid="importInput" onChange={onFile} />
       <main class="library-scroll">
         {list.length === 0 && (
           <div class="library-empty">
