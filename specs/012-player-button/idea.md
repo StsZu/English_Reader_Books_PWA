@@ -1,6 +1,6 @@
 # Кнопка «Слухати / Пауза» без зсуву панелі
 
-**Стан:** погоджено 2026-11-10 («ok кнопка») з уточненнями рецензії `TASK/2026-11-10_audit_review_and_answers.md`, розділ 3; K1–K5 виконано в обох застосунках (див. «Стан виконання»); перевірка на iPad — відкрито. Стосується обох застосунків: English Reader і Polish Reader (`/Users/szubar/Projects/ACTIVE/Polish_Reader_Books_PWA`); код спільний, однаковий байт у байт. Джерела: `TASK/2026-11-10_player_button_and_book_container.md` (розділ 1), аудит `TASK/2026-11-10_audit_and_vision.md` (розділ 2).
+**Стан:** погоджено 2026-11-10 («ok кнопка») з уточненнями рецензії `TASK/2026-11-10_audit_review_and_answers.md`, розділ 3; K1–K5 виконано в обох застосунках (див. «Стан виконання»); перевірено на iPad 2026-11-10. Стосується обох застосунків: English Reader і Polish Reader (`/Users/szubar/Projects/ACTIVE/Polish_Reader_Books_PWA`); код спільний, однаковий байт у байт. Джерела: `TASK/2026-11-10_player_button_and_book_container.md` (розділ 1), аудит `TASK/2026-11-10_audit_and_vision.md` (розділ 2).
 
 ## Формулювання
 
@@ -63,4 +63,4 @@
 - `specs/001-pwa-copy/spec.md`: відхилення V-20 (в обох застосунках).
 - Нові e2e: `tests/e2e/reader.spec.ts` («кнопка «Слухати / Пауза / Продовжити» не змінює розмір…»: координати кнопки, «Стоп», «Аудіокнига» й панелі до 1 px, фокус після Enter, доступна назва «Продовжити»), `tests/e2e/audiobook.spec.ts` («аудіокнига: кнопка «Слухати / Пауза» не змінює розмір…»: кнопка, «Уперед», «Аудіокнига», панель).
 - Done (2026-11-10): English — `npm test` (206), `npm run test:e2e` (61), `npm run check`, `npm run lint`, `npm run typecheck` зелені; Polish — `npm test` (209), `npm run test:e2e` (61), `npm run check`, `npm run lint`, `npm run typecheck` зелені; `npm run sibling-diff` — OK.
-- Не перевірено: iPad Safari в обох орієнтаціях, вузьке вікно й збільшений текст на пристрої (виконує користувач). Окремий прогін без збільшеного тексту в e2e не робився.
+- Перевірено на iPad (2026-11-10, користувач): обидва застосунки після розгортання `0959a2c` / `0aebd30` — «усе працює».
