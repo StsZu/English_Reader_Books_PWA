@@ -1,0 +1,10 @@
+// Cloudflare Workers: static site from `dist/` (CSP and headers in `public/_headers`).
+// `previews` lets builds of branches other than `main` get their own address (`npx wrangler preview`).
+{
+  "name": "english-reader-books-pwa",
+  "compatibility_date": "2026-10-21",
+  "assets": {
+    "directory": "./dist"
+  },
+  "previews": {}
+}
