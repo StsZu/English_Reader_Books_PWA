@@ -2,12 +2,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import * as prompts from '../../src/core/ai/prompts.ts'
-import { importBook } from '../../src/core/import/importer.ts'
-import { sentences } from '../../src/core/model/segmenter.ts'
-import { bestVoice } from '../../src/core/speech/system-speech.ts'
-import { defaultExplanationTemplate } from '../../src/core/storage/settings.ts'
-import { dictionaryURL } from '../../src/ui/word/dictionaries.ts'
+import * as prompts from '../../../src/core/ai/prompts.ts'
+import { importBook } from '../../../src/core/import/importer.ts'
+import { sentences } from '../../../src/core/model/segmenter.ts'
+import { bestVoice } from '../../../src/core/speech/system-speech.ts'
+import { defaultExplanationTemplate } from '../../../src/core/storage/settings.ts'
+import { dictionaryURL } from '../../../src/ui/word/dictionaries.ts'
 
 describe('English Reader: verbatim Swift strings', () => {
   const file = 'build/swift-strings.json'
@@ -39,7 +39,7 @@ describe('English Reader: external dictionaries (ServiceTests.testExternalDictio
 
 describe('English Reader: demo book (ImportTests.testBundledDemoBookImports)', () => {
   it('keeps the chapters and sentences of the native import', async () => {
-    const data = new Uint8Array(readFileSync(resolve(process.cwd(), 'public/demo.md')))
+    const data = new Uint8Array(readFileSync(resolve(process.cwd(), 'languages/en/public/demo.md')))
     const book = await importBook(data, 'md', 'demo')
     expect(book.chapters.map((c) => c.title)).toEqual(['A Scandal in Bohemia', 'The Red-Headed League'])
     const opening = book.chapters[0].paragraphs.find((p) => p.kind === 'text')!

@@ -16,7 +16,12 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "paths": {
+      "#language": ["./src/languages/en.ts"],
+      "#test-language": ["./tests/languages/en/fixtures.ts"]
+    }
   },
-  "include": ["src", "tests", "scripts", "vite.config.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": ["src", "tests", "scripts", "languages", "vite.config.ts", "vitest.config.ts", "playwright.config.ts"],
+  "exclude": ["src/languages/pl.ts", "tests/languages/pl"]
 }

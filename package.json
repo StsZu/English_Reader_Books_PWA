@@ -5,18 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --port 4173",
-    "test": "vitest run",
+    "dev:pl": "APP_LANG=pl vite",
+    "build": "npm run typecheck && vite build",
+    "build:pl": "npm run typecheck && APP_LANG=pl vite build",
+    "preview": "vite preview",
+    "preview:pl": "APP_LANG=pl vite preview",
+    "test": "vitest run && APP_LANG=pl vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "test:live": "LIVE=1 vitest run tests/live",
+    "test:e2e": "playwright test && APP_LANG=pl playwright test",
+    "test:live": "LIVE=1 vitest run tests/languages",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pl.json",
     "golden": "GOLDEN=1 vitest run tests/golden",
     "size": "node scripts/size.mjs",
-    "sibling-diff": "node scripts/sibling-diff.mjs",
-    "check": "npm run build && sh scripts/check-secrets.sh && node scripts/size.mjs"
+    "check": "npm run build && node scripts/check-language.mjs && sh scripts/check-secrets.sh && node scripts/size.mjs && npm run build:pl && APP_LANG=pl node scripts/check-language.mjs && sh scripts/check-secrets.sh && node scripts/size.mjs"
   },
   "dependencies": {
     "@preact/signals": "2.11.3",

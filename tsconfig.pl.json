@@ -1,0 +1,11 @@
+{
+  // Polish Reader (specs/014-shared-core): the same code checked with the Polish language module and test data.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "#language": ["./src/languages/pl.ts"],
+      "#test-language": ["./tests/languages/pl/fixtures.ts"]
+    }
+  },
+  "exclude": ["src/languages/en.ts", "tests/languages/en", "tests/golden"]
+}

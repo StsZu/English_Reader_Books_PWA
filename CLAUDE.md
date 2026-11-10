@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # English Reader PWA
 
-PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_Reader_Books` (SwiftUI, стан після етапу 2.5).
+PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_Reader_Books` (SwiftUI, стан після етапу 2.5). З 2026-11-10 (`specs/014-shared-core`) цей репозиторій збирає також Polish Reader PWA: один код, дві збірки (`APP_LANG=en` / `pl`), два сайти.
 
 ## Документи (читати на початку кожної сесії)
 
@@ -26,21 +26,20 @@ PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_
 - Після кожного завдання оновлювати його стан і результат перевірки в `tasks.md`.
 - Нова вимога або зміна поведінки щодо еталона — спершу запис у `spec.md` (або `idea.md` функції), потім код.
 - Тексти інтерфейсу — дослівно зі Swift-коду або записане відхилення; промпти й тексти помилок звіряються з еталоном (`scripts/extract-swift-strings.ts`).
-- Спільний код із `../Polish_Reader_Books_PWA`: усе мовне — лише в `src/core/language.ts`, `tests/fixtures/language.ts`, `tests/unit/language.test.ts`; решта файлів має збігатися байт у байт (`npm run sibling-diff`). Специфікації 002/003/005 і `backlog.md` стосуються обох застосунків; Polish Reader змінювати лише за окремим запитом.
+- Два застосунки з одного коду: усе мовне — лише в `src/languages/<мова>.ts` (через `src/core/language.ts` і псевдонім `#language`), `tests/languages/<мова>/` і `languages/<мова>/public/` (демо, маніфест, піктограми). Кожна зміна перевіряється для обох мов. Назви баз, префікси налаштувань, адреси сайтів і маніфести не змінювати. Ідеї й журнал Polish Reader — `specs/pl-002-polish/`; старий репозиторій `../Polish_Reader_Books_PWA` — лише читання.
 - Спілкування українською, стисло, без емодзі.
 
 ## Команди
 
-- `npm run dev` — розробка (тестовий режим увімкнено: `?reset`, `?testTranslation`, `?testSpeech`, `?testWordCard`, `?testSavedWords`, `?testRecording`, `?voice=system|openAI`, `?import=<шлях>`, `?gallery`).
-- `npm test` — модульні тести (без мережі); `npm run test:e2e` — WebKit iPad + офлайн у Chromium; `npm run golden` — розбиття проти нативного імпортера; `npm run check` — production-збірка, секрети, CSP, розмір.
+- `npm run dev` / `npm run dev:pl` — розробка English / Polish (тестовий режим увімкнено: `?reset`, `?testTranslation`, `?testSpeech`, `?testWordCard`, `?testSavedWords`, `?testRecording`, `?voice=system|openAI`, `?import=<шлях>`, `?gallery`).
+- `npm test` — модульні тести обох мов (без мережі); `npm run test:e2e` — WebKit iPad + офлайн у Chromium, обидві мови; `npm run golden` — розбиття проти нативного імпортера (English); `npm run check` — production-збірки обох мов, мова збірки, секрети, CSP, розмір; `npm run build` / `npm run build:pl` — збірка однієї мови в `dist/`.
 - `npm run lint`, `npm run typecheck`, `npm run size` — окремі перевірки зі складу стандартів конституції.
-- `npm run sibling-diff` — розбіжності з Polish Reader поза дозволеним списком у `scripts/sibling-diff.mjs`; після перенесення виправлення має бути «OK».
-- Один модульний тест: `npx vitest run tests/unit/segmenter.test.ts -t "<частина назви>"`.
-- Один e2e: `npx playwright test tests/e2e/reader.spec.ts --project=webkit-ipad -g "<частина назви>"`; офлайн — `--project=chromium-offline`.
+- Один модульний тест: `npx vitest run tests/unit/segmenter.test.ts -t "<частина назви>"` (Polish — з `APP_LANG=pl`).
+- Один e2e: `npx playwright test tests/e2e/reader.spec.ts --project=webkit-ipad -g "<частина назви>"`; офлайн — `--project=chromium-offline`; Polish — з `APP_LANG=pl`.
 - `npm run test:live` — платні живі тести OpenAI, лише з дозволом і ключем у змінній середовища.
 
 Особливості тестів:
-- e2e збирає `vite build --mode test` у `dist-test/` і піднімає preview на порту 4174; локально вже запущений сервер на 4174 використовується повторно — після змін коду його треба зупинити, інакше тести йдуть по старій збірці.
+- e2e збирає `vite build --mode test` у `dist-test/<мова>/` і піднімає preview на порту 4174 (English) або 4176 (Polish); локально вже запущений сервер на 4174 використовується повторно — після змін коду його треба зупинити, інакше тести йдуть по старій збірці.
 - `tests/setup.ts` кидає помилку на будь-який запит до `api.openai.com` (якщо не `LIVE=1`); `fake-indexeddb` і `happy-dom` — середовище модульних тестів.
 - `npm run golden` потребує `build/golden/*.swift.json` і `tests/fixtures/external/pg1661.epub` (не в git); без них випадки пропускаються, звіт — `build/golden/report.md`.
 - Тестові книжки e2e генеруються в пам'яті (`tests/fixtures/e2e/books.ts`, `tests/fixtures/zip-writer.ts`); EPUB у git не додавати (`check-secrets.sh` це перевіряє).
@@ -57,6 +56,8 @@ PWA-копія iPad-застосунку `/Users/szubar/Projects/ACTIVE/English_
 - `src/app/router.ts` — навігація сигналами (бібліотека ↔ читалка, тренування й «ШІ-сервіси» поверх), без URL-маршрутизації.
 - Тестовий режим: `__TEST_MODE__` (true у dev і `--mode test`, false у production) + `src/app/test-mode.ts`. Заглушки підключаються в самих модулях (`translation.ts`, `word.ts`, `openai-speech.ts`, `recorder.ts`, `engines.ts`, `key.ts`) під умовою `__TEST_MODE__ && testFlags.*`, щоб production-збірка їх відкидала; `check-secrets.sh` шукає їх у `dist/`.
 - Service worker: власний плагін у `vite.config.ts` підставляє список файлів і версію в `src/sw-template.js` → `sw.js` (не `vite-plugin-pwa` і не `src/sw.ts`, як у `plan.md`). Новий файл у `public/`, потрібний офлайн, додати до `precache` там само.
+- Мова збірки (`languages/app-language.ts`): `APP_LANG` вибирає `src/languages/<мова>.ts` (псевдонім `#language` у `vite.config.ts`, `vitest.config.ts`, `tsconfig.json` / `tsconfig.pl.json`), тестові дані `tests/languages/<мова>/fixtures.ts` (`#test-language`), порти й `public` (спільний `public/` + `languages/<мова>/public/` → `build/public-<мова>/`). Назва в `index.html` — `%APP_NAME%` з маніфесту мови.
+- Розгортання: `wrangler.en.jsonc` і `wrangler.pl.jsonc` (воркери `english-reader-books-pwa`, `polish-reader-books-pwa`); команди збірки — `npm run build` / `npm run build:pl`.
 - CSP задано двічі: `index.html` (meta) і `public/_headers` (Cloudflare); змінювати обидва.
 
 ## Стан (2026-10-27)

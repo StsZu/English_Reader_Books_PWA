@@ -1,10 +1,10 @@
 // Real (paid) OpenAI calls, ported from LiveOpenAITests in ServiceTests.swift.
 // Run only with permission: LIVE=1 OPENAI_API_KEY=... npm run test:live
 import { beforeAll, describe, expect, it } from 'vitest'
-import { setKeyProvider } from '../../src/core/ai/openai.ts'
-import { explanationDefaultTemplate } from '../../src/core/ai/prompts.ts'
-import { OpenAITranslationProvider } from '../../src/core/ai/translation.ts'
-import { ExplanationService, WordLookupService } from '../../src/core/ai/word.ts'
+import { setKeyProvider } from '../../../src/core/ai/openai.ts'
+import { explanationDefaultTemplate } from '../../../src/core/ai/prompts.ts'
+import { OpenAITranslationProvider } from '../../../src/core/ai/translation.ts'
+import { ExplanationService, WordLookupService } from '../../../src/core/ai/word.ts'
 
 const key = process.env.OPENAI_API_KEY
 const enabled = !!process.env.LIVE && !!key

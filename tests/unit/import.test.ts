@@ -10,6 +10,7 @@ import { skippedSummary } from '../../src/ui/library/LibraryScreen.tsx'
 import { formatForExtension, importBook, importFile, maxFileSize } from '../../src/core/import/importer.ts'
 import { decodeText, parseMarkdown, parsePlainText } from '../../src/core/import/text.ts'
 import { ZipArchive, ZipError } from '../../src/core/import/zip.ts'
+import { sourceLanguage } from '../../src/core/language.ts'
 import { demoBook } from '../fixtures/language.ts'
 import { makeEPUB, makeFormattedEPUB, zipArchive } from '../fixtures/zip-writer.ts'
 
@@ -88,7 +89,7 @@ code()
 
   // ImportTests.testBundledDemoBookImports
   it('вбудована демо-книжка', async () => {
-    const data = new Uint8Array(readFileSync(resolve(process.cwd(), 'public/demo.md')))
+    const data = new Uint8Array(readFileSync(resolve(process.cwd(), `languages/${sourceLanguage}/public/demo.md`)))
     const book = await importBook(data, 'md', 'demo')
     expect(book.title).toBe(demoBook.title)
     expect(book.author).toBe(demoBook.author)

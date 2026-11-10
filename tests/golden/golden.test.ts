@@ -10,7 +10,7 @@ import type { Book, BookFormat } from '../../src/core/model/book.ts'
 interface Case { name: string; file: string; format: BookFormat; title: string }
 
 const cases: Case[] = [
-  { name: 'demo', file: 'public/demo.md', format: 'md', title: 'demo' },
+  { name: 'demo', file: 'languages/en/public/demo.md', format: 'md', title: 'demo' },
   { name: 'pg1661', file: 'tests/fixtures/external/pg1661.epub', format: 'epub', title: 'pg1661' },
 ]
 

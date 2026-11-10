@@ -1,8 +1,14 @@
 import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { cpSync, readFileSync, rmSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import preact from '@preact/preset-vite'
 import { formatBuildVersion } from './src/core/util/format.ts'
+import { appLanguage, appTitle, ports } from './languages/app-language.ts'
+
+/** English Reader or Polish Reader (specs/014-shared-core). */
+const language = appLanguage()
+const path = (relative: string) => fileURLToPath(new URL(relative, import.meta.url))
 
 /** Short commit hash: the Cloudflare build variable, otherwise git; null when neither is available. */
 function commit(): string | null {
@@ -35,9 +41,28 @@ function serviceWorker(): Plugin {
   }
 }
 
+/** The shared `public/` with the files of the language on top (demo book, manifest, icons), in `build/public-<lang>`. */
+function publicDir(): string {
+  const dir = path(`./build/public-${language}`)
+  rmSync(dir, { recursive: true, force: true })
+  cpSync(path('./public'), dir, { recursive: true })
+  cpSync(path(`./languages/${language}/public`), dir, { recursive: true })
+  return dir
+}
+
+/** The app name in index.html. */
+function appName(): Plugin {
+  const name = appTitle(language)
+  return { name: 'app-name', transformIndexHtml: (html) => html.replaceAll('%APP_NAME%', name) }
+}
+
 export default defineConfig(({ mode }) => ({
   base: './',
-  plugins: [preact(), serviceWorker()],
+  publicDir: publicDir(),
+  plugins: [preact(), serviceWorker(), appName()],
+  resolve: { alias: { '#language': path(`./src/languages/${language}.ts`) } },
+  server: { port: ports[language].dev },
+  preview: { port: ports[language].preview },
   define: {
     __TEST_MODE__: JSON.stringify(mode !== 'production'),
     __APP_VERSION__: JSON.stringify(appVersion),

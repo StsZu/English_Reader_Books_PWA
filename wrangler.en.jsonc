@@ -1,0 +1,11 @@
+// Cloudflare Workers, English Reader (specs/014-shared-core, S5): static site from `dist/` built by `npm run build`
+// (CSP and headers in `public/_headers`). Deploy: `npx wrangler deploy --config wrangler.en.jsonc`;
+// branches: `npx wrangler preview --config wrangler.en.jsonc`.
+{
+  "name": "english-reader-books-pwa",
+  "compatibility_date": "2026-10-21",
+  "assets": {
+    "directory": "./dist"
+  },
+  "previews": {}
+}
