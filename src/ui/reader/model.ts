@@ -1,6 +1,6 @@
 // Port of EnglishReader/Views/ReaderViewModel.swift without the Apple offline fallback (V-01).
 // State is held in signals so the reader view re-renders only what changed.
-import { batch, computed, signal } from '@preact/signals'
+import { batch, computed, effect, signal, untracked } from '@preact/signals'
 import {
   aiErrorText, errorMessage, isAbort, isAIError, needsSettings, ReplayMissingError, type TranslationProvider,
 } from '../../contracts.ts'
@@ -130,6 +130,7 @@ export class ReaderModel {
   private selectionAnchor: WordPosition | null = null
   private longPressInProgress = false
   private lastLongPressEnd = 0
+  private readonly stopFollowingAudio: () => void
 
   constructor(readonly book: Book, options: { provider?: () => TranslationProvider; sentenceSpeaker?: OpenAISpeechEngine } = {}) {
     this.store = new TranslationStore(book.id)
@@ -143,6 +144,15 @@ export class ReaderModel {
       this.stopSentenceSpeech()
       stopPronunciation()
     }
+    // A prepared book: each new sentence heard in the audio becomes the selected one, so its translation is shown
+    // without a tap. A sentence tapped meanwhile stays until the next one is heard (specs/013-prepared-book, D3a).
+    this.stopFollowingAudio = effect(() => {
+      const heard = this.audioSentence.value
+      if (!heard || !settings.showTranslation.value) return
+      untracked(() => {
+        if (!this.selection.value && !sameSentence(this.activeSentence.value, heard)) this.select(heard)
+      })
+    })
   }
 
   /** Restores the saved position and selects a sentence opened from the saved list. */
@@ -821,6 +831,7 @@ export class ReaderModel {
 
   /** Stops every sound owned by the reader (leaving the reader). */
   dispose() {
+    this.stopFollowingAudio()
     this.savePosition()
     this.reading.stop()
     this.audiobook.dispose()

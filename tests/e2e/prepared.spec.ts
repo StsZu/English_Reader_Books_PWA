@@ -54,30 +54,34 @@ async function packageFiles() {
 
 const sentence = (page: Page, paragraph: number, s: number) => page.locator(`[data-p="${paragraph}"] .s[data-s="${s}"]`)
 
-test('підготовлена книжка: імпорт з аудіо, підсвічування речення, яке звучить, і готовий переклад', async ({ page }) => {
+test('підготовлена книжка: імпорт з аудіо, підсвічування речення, яке звучить, і його переклад без дотику', async ({ page }) => {
   await page.route('https://api.openai.com/**', (route) => route.abort())
   await page.goto('./?reset')
   await page.getByTestId('importPreparedInput').setInputFiles(await packageFiles())
   await expect(page.getByTestId('readerScroll')).toBeVisible()
   await expect(page.getByTestId('audioBar')).toBeVisible()
   await expect(page.locator('.s.active')).toHaveCount(0)
+  await expect(page.getByTestId('parallelTranslationHint')).toBeVisible()
 
-  // Forward to 5 s: the first sentence.
+  // Forward to 5 s: the first sentence and its translation from the package (requests to OpenAI are aborted here).
   await page.getByTestId('audioForward').click()
   await page.getByTestId('audioPlay').click()
   await expect(sentence(page, 0, 0)).toHaveClass(/active/, { timeout: 5_000 })
+  await expect(page.getByTestId('translation-0-0-0')).toHaveText('Перше речення.')
   await page.getByTestId('audioPause').click()
 
-  // Paused, seeking moves the highlight with the audio.
+  // Paused, seeking moves the highlight and the translation with the audio.
   for (let i = 0; i < 2; i++) await page.getByTestId('audioForward').click()
   await expect(sentence(page, 0, 1)).toHaveClass(/active/)
-  await expect(page.locator('.s.active')).toHaveCount(1)
+  await expect(page.getByTestId('translation-0-0-1')).toHaveText('Друге речення.')
+
+  // A tapped sentence stays until the next one is heard.
+  await sentence(page, 0, 0).locator('.w').first().click()
+  await expect(page.getByTestId('translation-0-0-0')).toHaveText('Перше речення.')
   for (let i = 0; i < 2; i++) await page.getByTestId('audioForward').click()
   await expect(sentence(page, 1, 0)).toHaveClass(/active/)
-
-  // The translation comes from the package, not from OpenAI (all requests to it are aborted here).
-  await sentence(page, 1, 0).locator('.w').first().click()
-  await expect(page.getByText('Третє речення.')).toBeVisible()
+  await expect(page.getByTestId('translation-0-1-0')).toHaveText('Третє речення.')
+  await expect(page.locator('.s.active')).toHaveCount(1)
 })
 
 test('підготовлена книжка без аудіофайла не імпортується', async ({ page }) => {
