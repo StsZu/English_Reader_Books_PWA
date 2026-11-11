@@ -9,7 +9,7 @@ import {
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import { importFile } from '../../core/import/importer.ts'
-import { importPrepared } from '../../core/prepared/import.ts'
+import { importPreparedSelection } from '../../core/prepared/import.ts'
 import { AUDIO_ACCEPT } from '../../core/audiobook/store.ts'
 import type { SkippedContent } from '../../core/import/epub.ts'
 import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } from '../../core/saved/saved.ts'
@@ -24,7 +24,7 @@ import './library.css'
 
 const ACCEPT = '.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown'
 /** A prepared book (specs/013-prepared-book): `.reader.json` chosen together with its audio files. */
-const PREPARED_ACCEPT = `.json,application/json,${AUDIO_ACCEPT}`
+const PREPARED_ACCEPT = `.polenuk,.zip,application/zip,.json,application/json,${AUDIO_ACCEPT}`
 
 export function LibraryScreen() {
   const [importing, setImporting] = useState(false)
@@ -74,7 +74,7 @@ export function LibraryScreen() {
     if (!files.length) return
     setImporting(true)
     try {
-      const result = await importPrepared(files)
+      const result = await importPreparedSelection(files)
       openBook(result.summary.id)
     } catch (error) {
       lastError.value = errorMessage(error)

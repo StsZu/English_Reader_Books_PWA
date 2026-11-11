@@ -3,6 +3,7 @@
 import type { Book, BookSummary } from '../model/book.ts'
 import { journalDelete, journalPut, putTracksInOrder, saveSync } from '../audiobook/store.ts'
 import { withImportLock } from './coordination.ts'
+import { ContainerError, matchPackage, openContainer, type ByteSource } from './container.ts'
 import { TranslationStore } from '../ai/translation.ts'
 import { addBook, deleteBook } from '../storage/library.ts'
 import { maxFileSize } from '../import/importer.ts'
@@ -105,4 +106,41 @@ async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hook
     await journalDelete(book.id).catch(() => {})
     throw error
   }
+}
+
+
+// ----------------------------------------------------------------- one file (specs/015-reader-book-container, R023)
+
+/** A `.polenuk` (or the same content as `.zip`): one file with the package and its MP3s. */
+export const isContainerFile = (file: { name: string }) => /\.(polenuk|zip)$/i.test(file.name)
+
+/**
+ * Imports a one-file prepared book. The container is read in pieces (File.slice); its package and MP3s become the
+ * same input the folder import takes, so the checks (language, translation, time, SHA-256) and the atomic write with
+ * the import lock are the ones of importPrepared. Nothing is written when any check fails.
+ */
+export async function importContainer(file: File, now = new Date()): Promise<PreparedImport> {
+  const src: ByteSource = { size: file.size, read: async (a, b) => new Uint8Array(await file.slice(a, b).arrayBuffer()) }
+  let opened
+  try {
+    opened = await openContainer(src)
+  } catch (error) {
+    if (error instanceof ContainerError) throw new Error(`Книжку не імпортовано. ${error.message}`)
+    throw error
+  }
+  const problems = await validatePackage(opened.package)
+  if (problems.length) throw new Error(`Книжку не імпортовано. ${problems.join(' ')}`)
+  const mismatch = matchPackage(opened, opened.package as ReaderPackage)
+  if (mismatch.length) throw new Error(`Книжку не імпортовано. ${mismatch.join(' ')}`)
+  const pkg = new File([JSON.stringify(opened.package)], 'book.reader.json', { type: 'application/json' })
+  // Slices of the chosen file: no MP3 is copied into memory here; importPrepared hashes and stores them in pieces.
+  const audio = opened.audio.map((a) => new File([file.slice(a.dataStart, a.dataStart + a.size)], a.name, { type: 'audio/mpeg' }))
+  return importPrepared([pkg, ...audio], now)
+}
+
+/** The prepared-book button: one container, or a package with its audio files. */
+export async function importPreparedSelection(files: File[], now = new Date()): Promise<PreparedImport> {
+  if (files.length === 1 && isContainerFile(files[0])) return importContainer(files[0], now)
+  if (files.some(isContainerFile)) throw new Error('Виберіть або один файл .polenuk, або файл .reader.json разом з аудіофайлами.')
+  return importPrepared(files, now)
 }

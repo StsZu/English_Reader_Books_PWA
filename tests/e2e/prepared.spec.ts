@@ -7,6 +7,8 @@ import type { Chapter } from '../../src/core/model/book.ts'
 import { editionHash, PACKAGE_FORMAT, PACKAGE_VERSION, type ReaderPackage } from '../../src/core/prepared/package.ts'
 import { databaseName, sourceLanguage } from '../../src/core/language.ts'
 import { demoBook, preparedText } from '../fixtures/language.ts'
+import { zipArchive } from '../fixtures/zip-writer.ts'
+import { CONTAINER_MIMETYPE } from '../../src/core/prepared/container.ts'
 
 function wav(seconds: number): Buffer {
   const samples = 8000 * seconds
@@ -172,4 +174,38 @@ test('аудіобаза версії 2 з прототипу 013 відкрив
     }
   }), { name: databaseName, bookID })
   expect(copied).toEqual({ '0-0': [['t-old', 1, 2]] })
+})
+
+
+/** The same package and audio in one `.polenuk` (specs/015-reader-book-container, R023); `language` overrides the package's. */
+async function polenuk(language?: string) {
+  const [pkgFile, audioFile] = await packageFiles()
+  const pkg = JSON.parse(pkgFile.buffer.toString())
+  if (language) pkg.language = language
+  const meta = JSON.stringify({ format: 'reader-book-container', version: 1, package: 'book.reader.json',
+    audio: [{ path: `audio/${audioFile.name}`, size: audioFile.buffer.length, sha256: createHash('sha256').update(audioFile.buffer).digest('hex') }] })
+  const bytes = zipArchive([['mimetype', CONTAINER_MIMETYPE, false], ['container.json', meta, true],
+    ['book.reader.json', JSON.stringify(pkg), true], [`audio/${audioFile.name}`, new Uint8Array(audioFile.buffer), false]])
+  return { name: 'synthetic.polenuk', mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) }
+}
+
+test('один файл .polenuk: та сама книжка з аудіо, підсвічуванням і перекладом', async ({ page }) => {
+  await page.route('https://api.openai.com/**', (route) => route.abort())
+  await page.goto('./?reset')
+  await page.getByTestId('importPreparedInput').setInputFiles([await polenuk()])
+  await expect(page.getByTestId('readerScroll')).toBeVisible()
+  await expect(page.getByTestId('audioBar')).toBeVisible()
+  await page.getByTestId('audioForward').click()
+  await page.getByTestId('audioPlay').click()
+  await expect(sentence(page, 0, 0)).toHaveClass(/active/, { timeout: 5_000 })
+  await expect(page.getByTestId('translation-0-0-0')).toHaveText('Перше речення.')
+})
+
+test('один файл .polenuk іншої мови не імпортується, бібліотека та сама', async ({ page }) => {
+  await page.goto('./?reset')
+  const before = await page.locator('[data-testid^="book-"]').count()
+  const other = String(sourceLanguage) === 'en' ? 'pl' : 'en'
+  await page.getByTestId('importPreparedInput').setInputFiles([await polenuk(other)])
+  await expect(page.getByText(/Книжку не імпортовано.*підготовлено для мови/)).toBeVisible()
+  await expect(page.locator('[data-testid^="book-"]')).toHaveCount(before)
 })
