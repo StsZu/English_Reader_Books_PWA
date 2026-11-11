@@ -145,4 +145,11 @@ S1–S7 — 1–2 дні (оцінка); S5 і S8 залежать від нал
 | 8.7 | користувач, потім Claude | English-воркер: Deploy `npx wrangler deploy --config wrangler.en.jsonc`, Preview `npx wrangler preview --config wrangler.en.jsonc`; повторити збірку `main` | розгортання з `wrangler.en.jsonc`, без autoconfig; як у 8.4 | повернути `npx wrangler deploy`; rollback на версію з 8.4 |
 | 8.8 | Claude, з дозволу | README у `Polish_Reader_Books_PWA` («перенесено, лише читання»), коміт і push туди | README на GitHub | revert |
 
+**8.2 — виконано 2026-11-11.** Коміт `3291676` у `014-shared-core` (не запушено). Перегляди оновлено з CLI по черзі (`npm run build` → `npx wrangler preview --config wrangler.en.jsonc`; `npm run build:pl` → `npx wrangler preview --config wrangler.pl.jsonc`):
+
+- English: https://014-shared-core-english-reader-books-pwa.sts-zubar.workers.dev (розгортання https://0f3607f4-english-reader-books-pwa.sts-zubar.workers.dev).
+- Polish: https://014-shared-core-polish-reader-books-pwa.sts-zubar.workers.dev (розгортання https://00f01573-polish-reader-books-pwa.sts-zubar.workers.dev).
+- Обидва: `/` — 200, свій заголовок, у JS лише своя база, `sw.js` — `3291676`, CSP є. Робочі сайти не змінилися (`45d36de`, `cd13372`).
+- Неіснуючий шлях: запит браузера (навігація, `Sec-Fetch-Mode: navigate`, `Accept: text/html`) — **200** (`index.html`), як на робочих сайтах. Простий запит без цих заголовків (curl) — **404**, а на робочих сайтах — 200. Дата сумісності не причина: перегляд English з `2026-11-09` (як у робочої версії) дав те саме; конфігурацію повернуто до закоміченої й перегляд English опубліковано ще раз. Причину не встановлено (можливо, особливість переглядів або конфігурації `@cloudflare/vite-plugin`). Для браузера й PWA поведінка однакова; остаточно — перевірити на робочому сайті Polish у 8.6 і English у 8.7 (перше розгортання з явною конфігурацією).
+
 Після 8.8 — S9 (гілка 013 містить `wrangler.jsonc` — під час перебазування його прибрати, інакше голий `deploy` English почне брати його замість autoconfig) і питання 4.
