@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { Chapter } from '../../src/core/model/book.ts'
 import { editionHash, PACKAGE_FORMAT, PACKAGE_VERSION } from '../../src/core/prepared/package.ts'
 import { importPrepared, sourceOf } from '../../src/core/prepared/import.ts'
-import { loadBook, resetAll } from '../../src/core/storage/library.ts'
+import { addBook, loadBook, resetAll } from '../../src/core/storage/library.ts'
 import { loadPosition, savePosition } from '../../src/core/storage/positions.ts'
 import { listTracks } from '../../src/core/audiobook/store.ts'
 import { sourceLanguage } from '../../src/core/language.ts'
@@ -45,6 +45,27 @@ describe('repeated import (R024)', () => {
     expect(await loadPosition(second.summary.id)).toBeNull()
     expect(await listTracks(first.summary.id)).toEqual(firstTracks)
     expect((await loadBook(first.summary.id))?.title).toBe('Same book')
+  })
+
+  it('stays distinct when a plain import takes the title while a prepared import is between its phases', async () => {
+    let release!: () => void
+    let paused!: () => void
+    const reached = new Promise<void>((resolve) => { paused = resolve })
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const prepared = importPrepared(await files(), new Date(), {
+      afterPhase: async (name) => { if (name === 'checked') { paused(); await gate } },
+    })
+    await reached
+    // A plain EPUB/TXT import does not take the import lock: it adds «Same book» and «Same book (2)» meanwhile.
+    const plain = (id: string, title: string) => addBook({ id, title, author: 'A', format: 'txt', importedAt: new Date().toISOString(), chapters })
+    await plain('plain-1', 'Same book')
+    await plain('plain-2', 'Same book (2)')
+    release()
+    const result = await prepared
+    expect(result.summary.title).toBe('Same book (3)')
+    expect((await loadBook(result.summary.id))?.title).toBe('Same book (3)')
+    expect((await loadBook('plain-1'))?.title).toBe('Same book')
+    expect((await loadBook('plain-2'))?.title).toBe('Same book (2)')
   })
 })
 

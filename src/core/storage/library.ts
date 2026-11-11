@@ -31,16 +31,11 @@ async function reloadIndex() {
   books.value = asIndex(await getValue('meta', INDEX))
 }
 
-/** Titles of the books as stored now. */
-export async function storedTitles(): Promise<string[]> {
-  return asIndex(await getValue('meta', INDEX)).map((b) => b.title)
-}
-
-/** A title no stored book has: «Title», else «Title (2)», «Title (3)»… (a repeated import is a recognisable copy). */
-export async function uniqueTitle(title: string): Promise<string> {
-  const taken = new Set(await storedTitles())
-  if (!taken.has(title)) return title
-  for (let n = 2; ; n++) if (!taken.has(`${title} (${n})`)) return `${title} (${n})`
+/** A title none of `taken` has: «Title», else «Title (2)», «Title (3)»… (a repeated import is a recognisable copy). */
+export function distinctTitle(title: string, taken: Iterable<string>): string {
+  const used = new Set(taken)
+  if (!used.has(title)) return title
+  for (let n = 2; ; n++) if (!used.has(`${title} (${n})`)) return `${title} (${n})`
 }
 
 /** Ids of the books as stored now (not the list in memory, which another tab may have changed). */
@@ -62,13 +57,18 @@ export async function loadBook(id: string): Promise<Book | null> {
  * Saves the book and its index entry in one transaction (R1). The stored index is merged, not overwritten
  * with the list in memory; the list on screen changes only after the commit.
  */
-export async function addBook(book: Book): Promise<BookSummary> {
-  const summary = summarize(book)
+export async function addBook(book: Book, options: { distinctTitle?: boolean } = {}): Promise<BookSummary> {
+  let summary = summarize(book)
   let index: BookSummary[]
   try {
     index = await transact(['books', 'meta'], async (tx) => {
-      await tx.objectStore('books').put(book, book.id)
       const stored = asIndex(await tx.objectStore('meta').get(INDEX))
+      // Chosen in the same transaction as the write, so no other import (any kind, any tab) can take the title between.
+      if (options.distinctTitle) {
+        book.title = distinctTitle(book.title, stored.filter((b) => b.id !== book.id).map((b) => b.title))
+        summary = summarize(book)
+      }
+      await tx.objectStore('books').put(book, book.id)
       // A book imported again keeps the time it was last opened (specs/010-library, F1).
       const openedAt = stored.find((b) => b.id === book.id)?.openedAt
       if (openedAt) summary.openedAt = openedAt

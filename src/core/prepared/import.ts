@@ -5,7 +5,7 @@ import { journalDelete, journalPut, putTracksInOrder, saveSync } from '../audiob
 import { withImportLock } from './coordination.ts'
 import { ContainerError, matchPackage, openContainer, type ByteSource } from './container.ts'
 import { TranslationStore } from '../ai/translation.ts'
-import { addBook, deleteBook, uniqueTitle } from '../storage/library.ts'
+import { addBook, deleteBook } from '../storage/library.ts'
 import { maxFileSize } from '../import/importer.ts'
 import { sha256File } from '../util/sha256.ts'
 import { PACKAGE_SUFFIX, validatePackage, type ReaderPackage, type StoredSync } from './package.ts'
@@ -83,8 +83,6 @@ async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hook
     await hooks.afterPhase?.(name, book.id)
   }
   try {
-    // Under the import lock: two imports of the same book get different titles, the older one keeps its own.
-    book.title = await uniqueTitle(book.title)
     await phase('checked')
     const tracks = await putTracksInOrder(book.id, audio)
     await phase('tracks')
@@ -98,7 +96,8 @@ async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hook
     const store = new TranslationStore(book.id)
     for (const [key, lines] of Object.entries(pkg.translations)) await store.saveForKey(lines, key)
     await phase('translations')
-    const summary = await addBook(book)
+    // The title is made distinct in the transaction that adds the book: the older book keeps its own (R024).
+    const summary = await addBook(book, { distinctTitle: true })
     await journalDelete(book.id)
     const sentences = book.chapters.reduce((n, c) => n + c.paragraphs.reduce((m, p) => m + p.sentences.length, 0), 0)
     const timed = Object.values(pkg.sync).reduce((n, entries) => n + entries.filter(Boolean).length, 0)
