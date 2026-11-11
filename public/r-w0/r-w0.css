@@ -1,0 +1,8 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #111; --muted: #666; --ok: #0a7a2f; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #aaa; --ok: #4cd964; --bad: #ff6b60; } }
+  body { background: var(--bg); color: var(--fg); font: 17px -apple-system, system-ui, sans-serif; margin: 0 16px 48px; }
+  h1 { font-size: 22px; } section { border-top: 1px solid var(--muted); padding: 12px 0; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; }
+  input[type=file] { font-size: 17px; min-height: 44px; }
+  pre { white-space: pre-wrap; font: 14px ui-monospace, monospace; color: var(--muted); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }

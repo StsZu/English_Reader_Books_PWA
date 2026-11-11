@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R-W0 polenuk</title>
+<link rel="stylesheet" href="r-w0.css">
+</head>
+<body>
+<h1>R-W0: вибір <code>.polenuk</code> на iPad</h1>
+<p>Тестова сторінка R001 (лише ця сторінка; без книжок, аудіо й даних користувача; нічого не надсилає й не зберігає). Безпечний контекст: <b id="secure"></b>. Тестова сторінка поза застосунком Reader: перевіряє лише вибір файла з різними фільтрами, читання частинами й Web Locks. Нічого не надсилає й не зберігає.</p>
+<section><b>Web Locks:</b> <span id="locks"></span></section>
+<section>
+  <label for="a">1. accept=".polenuk"</label><input id="a" type="file" accept=".polenuk">
+  <label for="b">2. accept=".polenuk,.zip"</label><input id="b" type="file" accept=".polenuk,.zip">
+  <label for="c">3. accept=".polenuk,application/zip,application/octet-stream"</label><input id="c" type="file" accept=".polenuk,application/zip,application/octet-stream">
+  <label for="d">4. без фільтра</label><input id="d" type="file">
+  <label for="e">5. як зараз у Reader: .json і аудіо, кілька файлів</label><input id="e" type="file" multiple accept=".json,application/json,audio/*,.mp3,.m4a,.m4b">
+</section>
+<section><b>Результат:</b><pre id="out">Ще нічого не вибрано.</pre></section>
+<script src="r-w0.js"></script>
+</body>
+</html>
