@@ -5,7 +5,12 @@
   "name": "english-reader-books-pwa",
   "compatibility_date": "2026-10-21",
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    // As the configuration that Cloudflare's autoconfig made for the sites before the merge: unknown paths get index.html.
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
   },
   "previews": {}
 }

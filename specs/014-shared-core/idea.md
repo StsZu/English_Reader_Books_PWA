@@ -100,6 +100,49 @@ S1–S7 — 1–2 дні (оцінка); S5 і S8 залежать від нал
 
 **Що далі**
 
-- S5: налаштування Cloudflare (робить користувач): воркер English — команда збірки `npm run build`, розгортання `npx wrangler deploy --config wrangler.en.jsonc`, гілки — `npx wrangler preview --config wrangler.en.jsonc`; воркер Polish — підключити цей репозиторій, збірка `npm run build:pl`, розгортання `npx wrangler deploy --config wrangler.pl.jsonc`, гілки — `npx wrangler preview --config wrangler.pl.jsonc`. Спершу перевірити адреси гілки `014-shared-core` для обох воркерів.
-- S8: перемикання Polish-воркера на `main` цього репозиторію; README у Polish Reader.
+- S5, адреси перегляду (2026-11-11): створено з CLI без зміни робочих сайтів і підключень репозиторіїв — `npm run build` → `npx wrangler preview --config wrangler.en.jsonc`, потім `npm run build:pl` → `npx wrangler preview --config wrangler.pl.jsonc` (wrangler 4.160.0, вхід OAuth; `preview` — відкрита бета). Гілку не запушено.
+  - English: https://014-shared-core-english-reader-books-pwa.sts-zubar.workers.dev (розгортання https://d922279d-english-reader-books-pwa.sts-zubar.workers.dev).
+  - Polish: https://014-shared-core-polish-reader-books-pwa.sts-zubar.workers.dev (розгортання https://1f2da271-polish-reader-books-pwa.sts-zubar.workers.dev).
+  - Перевірено curl: `index.html`, маніфест, JS, `demo.md`, `sw.js` — 200; заголовок і маніфест своєї мови; у JS лише своя база й назва (`english-reader` / `polish-reader`); демо — Sherlock Holmes / «Latarnik»; версія `63fc522`; CSP є. Робочі сайти не змінилися (`45d36de`, `cd13372`).
+  - Ручна перевірка обох адрес — 2026-11-11, користувач: «перевірив, все працює». S5 (адреси перегляду) виконано.
+- S5, налаштування Cloudflare (робить користувач): воркер English — команда збірки `npm run build`, розгортання `npx wrangler deploy --config wrangler.en.jsonc`, гілки — `npx wrangler preview --config wrangler.en.jsonc`; воркер Polish — підключити цей репозиторій, збірка `npm run build:pl`, розгортання `npx wrangler deploy --config wrangler.pl.jsonc`, гілки — `npx wrangler preview --config wrangler.pl.jsonc`. Спершу перевірити адреси гілки `014-shared-core` для обох воркерів.
+- S8: план нижче («S8: послідовність злиття й перемикання»).
 - S9: гілка 013.
+
+### S8: послідовність злиття й перемикання (уточнено 2026-11-11, не виконано)
+
+**8.1. Поточні налаштування Workers Builds** (прочитано користувачем у Cloudflare Dashboard 2026-11-11, без змін)
+
+| | English-воркер | Polish-воркер |
+|---|---|---|
+| Репозиторій | `StsZu/English_Reader_Books_PWA` | `StsZu/Polish_Reader_Books_PWA` |
+| Production branch | `main` | `main` |
+| Build command | `npm run build` | `npm run build` |
+| Deploy command | `npx wrangler deploy` | `npx wrangler deploy` |
+| Root directory | `/` | `/` |
+| Previews Base: builds for preview branches | увімкнено; `npm run build`; `npx wrangler preview`; `/` | так само |
+| Disable builds / Build cache / змінні й секрети | вимкнено / увімкнено / немає | так само |
+
+Поточні версії для відкату (`wrangler deployments status`): English `fbebfc4a-3662-4b99-a90d-efd386021cb5` (збірка `45d36de`), Polish `a3104dec-fd92-4150-b3f6-4d7cd0411352` (збірка `cd13372`).
+
+**Що робить голий `npx wrangler deploy` (перевірено 2026-11-11, wrangler 4.160.0, локально, без завантаження)**
+
+- Файла `wrangler.json(c)/toml` немає ні в `main`, ні в `014-shared-core`; `wrangler.en.jsonc` і `wrangler.pl.jsonc` Wrangler сам не шукає. Без файла `deploy` працює лише через autoconfig (`--autoconfig`, увімкнено типово): розпізнає Vite, ставить `wrangler` і `@cloudflare/vite-plugin`, додає `cloudflare()` у `vite.config.ts`, створює `wrangler.jsonc` (`assets.not_found_handling: "single-page-application"`, `observability.enabled`), **запускає `npm run build`** і розгортає `dist/`. Так зараз розгортаються обидва робочі сайти (дата сумісності версії English — 2026-11-09, тобто autoconfig під час збірки).
+- `wrangler setup --yes --build` (те саме autoconfig без розгортання) у робочих копіях `main` і `014-shared-core`: ті самі зміни, збірка English в обох; JS однаковий з точністю до рядка версії, `manifest.webmanifest`, `demo.md`, `_headers`, `.assetsignore` — однакові, згенерований `dist/wrangler.json` відрізняється лише шляхами. Отже, **English-воркер з чинними командами після злиття розгорне те саме, що зараз**.
+- **Polish-воркер з голим `deploy` після підключення цього репозиторію розгорнув би English**: autoconfig сам запускає `npm run build` (English) і перезаписує `dist/` після `npm run build:pl`. Тому для Polish — лише `--config wrangler.pl.jsonc` (з файлом налаштувань autoconfig не запускається).
+- Робочі сайти віддають `index.html` (200) на неіснуючий шлях, а адреси перегляду з явними `wrangler.*.jsonc` без `not_found_handling` — 404. У `wrangler.en.jsonc` і `wrangler.pl.jsonc` додано `"not_found_handling": "single-page-application"` і `observability`, як у autoconfig; `--dry-run` обох — без помилок. Перевірити на Cloudflare — новим переглядом (8.2).
+- Перегляди гілок (`npx wrangler preview` без `--config`) після злиття, як і зараз, падатимуть (немає `previews` у конфігурації autoconfig), доки команду не змінено; на робочі сайти це не впливає.
+
+**Порядок**
+
+| Крок | Хто | Що | Перевірка | Відкат |
+|---|---|---|---|---|
+| 8.2 | Claude, з дозволу | Закомітити зміни конфігурацій у `014-shared-core`; оновити перегляди обох мов (`npm run build` → `npx wrangler preview --config wrangler.en.jsonc`; `npm run build:pl` → `npx wrangler preview --config wrangler.pl.jsonc`) | неіснуючий шлях — 200, мова, CSP, версія | перегляд не впливає на робочі сайти |
+| 8.3 | Claude, з дозволу | Злиття `014-shared-core` у `main` локально (fast-forward від `60c8027`), повні перевірки обох мов | `typecheck`, `lint`, `test`, `test:e2e`, `check` | локальний `git reset` |
+| 8.4 | Claude, з дозволу | Push `main` → English-воркер з **чинними** командами (autoconfig, перевірено вище); Polish-воркер не реагує | `sw.js` English — новий коміт; заголовок, маніфест, `english-reader`, неіснуючий шлях — 200; iPad: бібліотека на місці | `npx wrangler rollback fbebfc4a-3662-4b99-a90d-efd386021cb5 --name english-reader-books-pwa` |
+| 8.5 | користувач | Polish-воркер одним збереженням: репозиторій `StsZu/English_Reader_Books_PWA`, гілка `main`, Build `npm run build:pl`, Deploy `npx wrangler deploy --config wrangler.pl.jsonc`; Previews Base: Build `npm run build:pl`, Preview `npx wrangler preview --config wrangler.pl.jsonc`; запустити збірку `main` | журнал: `APP_LANG=pl vite build`, розгортання з `wrangler.pl.jsonc`, без autoconfig | повернути підключення й команди; `npx wrangler rollback a3104dec-fd92-4150-b3f6-4d7cd0411352 --name polish-reader-books-pwa` |
+| 8.6 | Claude | Перевірка Polish після 8.5 | `sw.js` — коміт з `main` цього репозиторію; «Polish Reader», `polish-reader`, «Latarnik», неіснуючий шлях — 200; iPad: бібліотека на місці | як у 8.5 |
+| 8.7 | користувач, потім Claude | English-воркер: Deploy `npx wrangler deploy --config wrangler.en.jsonc`, Preview `npx wrangler preview --config wrangler.en.jsonc`; повторити збірку `main` | розгортання з `wrangler.en.jsonc`, без autoconfig; як у 8.4 | повернути `npx wrangler deploy`; rollback на версію з 8.4 |
+| 8.8 | Claude, з дозволу | README у `Polish_Reader_Books_PWA` («перенесено, лише читання»), коміт і push туди | README на GitHub | revert |
+
+Після 8.8 — S9 (гілка 013 містить `wrangler.jsonc` — під час перебазування його прибрати, інакше голий `deploy` English почне брати його замість autoconfig) і питання 4.
