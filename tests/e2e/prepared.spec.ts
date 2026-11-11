@@ -203,7 +203,10 @@ test('один файл .polenuk: та сама книжка з аудіо, пі
 
 test('один файл .polenuk іншої мови не імпортується, бібліотека та сама', async ({ page }) => {
   await page.goto('./?reset')
+  // The demo book is added at start: count only after it is there, or the count races the start.
+  await expect(page.getByText(demoBook.title).first()).toBeVisible()
   const before = await page.locator('[data-testid^="book-"]').count()
+  expect(before).toBeGreaterThan(0)
   const other = String(sourceLanguage) === 'en' ? 'pl' : 'en'
   await page.getByTestId('importPreparedInput').setInputFiles([await polenuk(other)])
   await expect(page.getByText(/Книжку не імпортовано.*підготовлено для мови/)).toBeVisible()
