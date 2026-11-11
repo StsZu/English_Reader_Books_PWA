@@ -26,6 +26,8 @@
 5. Рядок «Web Locks: є/немає».
 6. Для кожного поля 1–5: чи можна вибрати `.polenuk` і `.zip` (чи вони сірі), що показує «Результат»: назва, розмір, тип, перші байти `50 4b 03 04`, «кінець каталогу знайдено: записів 4», ім'я першого запису `mimetype`.
 
+**HTTPS-сторінка (опубліковано 2026-11-11, дозвіл «ok R001-preview» / «ok R001-wrangler-preview»):** `https://r001-polenuk-page-english-reader-books-pwa.sts-zubar.workers.dev/r-w0/` і `https://r001-polenuk-page-polish-reader-books-pwa.sts-zubar.workers.dev/r-w0/` — Worker Previews наявних воркерів, створені локально `npx wrangler preview --config wrangler.<мова>.jsonc --name r001-polenuk-page` з гілки `r001-polenuk-page` (`5c75492` = `main` + три файли `r-w0/`); унікальні адреси розгортань `0adc1a8b-…` (en) і `209c2063-…` (pl). Перевірено на Mac (WebKit, не iPad): HTTP 200 для трьох файлів, заголовок CSP застосунку, безпечний контекст — так, Web Locks — є, `.polenuk` читається частинами, помилок консолі немає. Production не змінився: `e938439c` (en), `141a3f7d` (pl), `main` = `1307f76`; на production `/r-w0/…` повертає лише запасну сторінку SPA. **Спостереження:** автоматична збірка Workers Builds для гілки не запустилась (watch paths: include `*`, exclude порожньо, за словами dot) — причина не з'ясована. Тимчасовий HTTP-сервер у мережі зупинено.
+
 **Встановлена PWA** — не цим тестом: поле вибору всередині встановленої PWA English/Polish Reader перевіряється в R-W3 після реалізації імпорту (без production до окремого дозволу).
 
 ## Як вирішується D3
