@@ -1,7 +1,8 @@
 // Import of a prepared book (specs/013-prepared-book, D0): `<name>.reader.json` and its audio files chosen together.
 // Everything is checked before anything is written; the book appears in the library only at the end (M9).
 import type { Book, BookSummary } from '../model/book.ts'
-import { putTracksInOrder, saveSync } from '../audiobook/store.ts'
+import { journalDelete, journalPut, putTracksInOrder, saveSync } from '../audiobook/store.ts'
+import { withImportLock } from './coordination.ts'
 import { TranslationStore } from '../ai/translation.ts'
 import { addBook, deleteBook } from '../storage/library.ts'
 import { maxFileSize } from '../import/importer.ts'
@@ -52,7 +53,10 @@ async function checkSpace(bytes: number) {
   if (estimate.quota - estimate.usage < bytes * 1.1) throw new Error('Книжку не імпортовано: на пристрої замало місця для аудіо.')
 }
 
-export async function importPrepared(files: File[], now = new Date()): Promise<PreparedImport> {
+/** Tests: called after each phase is written, to stop an import in the middle (specs/015, R021). */
+export interface ImportHooks { afterPhase?(phase: string, bookId: string): Promise<void> }
+
+export async function importPrepared(files: File[], now = new Date(), hooks: ImportHooks = {}): Promise<PreparedImport> {
   const packages = files.filter(isPackageFile)
   if (packages.length !== 1) throw new Error('Виберіть один файл підготовленої книжки (.reader.json) разом з його аудіофайлами.')
   const pkg = await readPackage(packages[0])
@@ -68,23 +72,37 @@ export async function importPrepared(files: File[], now = new Date()): Promise<P
     chapters: pkg.book.chapters,
     ...(pkg.book.contents ? { contents: pkg.book.contents } : {}),
   }
+  return withImportLock(() => writePrepared(pkg, audio, book, hooks))
+}
+
+async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hooks: ImportHooks): Promise<PreparedImport> {
+  const phase = async (name: string) => {
+    await journalPut({ bookId: book.id, phase: name, startedAt: book.importedAt })
+    await hooks.afterPhase?.(name, book.id)
+  }
   try {
+    await phase('checked')
     const tracks = await putTracksInOrder(book.id, audio)
+    await phase('tracks')
     const ids = new Map(pkg.tracks.map((track, i) => [track.id, tracks[i].id]))
     const sync: StoredSync = {}
     for (const [key, entries] of Object.entries(pkg.sync)) {
       sync[key] = entries.map((entry) => (entry ? [ids.get(entry[0])!, entry[1], entry[2]] : null))
     }
     await saveSync(book.id, sync)
+    await phase('sync')
     const store = new TranslationStore(book.id)
     for (const [key, lines] of Object.entries(pkg.translations)) await store.saveForKey(lines, key)
+    await phase('translations')
     const summary = await addBook(book)
+    await journalDelete(book.id)
     const sentences = book.chapters.reduce((n, c) => n + c.paragraphs.reduce((m, p) => m + p.sentences.length, 0), 0)
     const timed = Object.values(pkg.sync).reduce((n, entries) => n + entries.filter(Boolean).length, 0)
     return { summary, untimed: sentences - timed, sentences }
   } catch (error) {
     // Nothing of a failed import stays: audio, time and translations of the new id (the book itself was not added).
     await deleteBook(book.id).catch(() => {})
+    await journalDelete(book.id).catch(() => {})
     throw error
   }
 }

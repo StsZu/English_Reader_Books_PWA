@@ -31,6 +31,11 @@ async function reloadIndex() {
   books.value = asIndex(await getValue('meta', INDEX))
 }
 
+/** Ids of the books as stored now (not the list in memory, which another tab may have changed). */
+export async function storedBookIDs(): Promise<string[]> {
+  return asIndex(await getValue('meta', INDEX)).map((b) => b.id)
+}
+
 /** Loads the library index; call once at startup. */
 export async function initLibrary(): Promise<void> {
   listenToOtherTabs()

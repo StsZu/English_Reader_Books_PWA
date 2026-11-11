@@ -161,6 +161,28 @@ export async function putTracksInOrder(bookID: string, files: File[]): Promise<A
   }
 }
 
+/** Journal of prepared-book imports in progress (specs/015-reader-book-container, R021): in the meta store of the
+ * sentence-time database, so no database gets a new version. Key `import:<book id>`. */
+export interface ImportJournal { bookId: string; phase: string; startedAt: string }
+const JOURNAL = 'import:'
+
+export async function journalPut(entry: ImportJournal): Promise<void> {
+  await (await syncDB()).put('meta', entry, JOURNAL + entry.bookId)
+}
+
+export async function journalDelete(bookId: string): Promise<void> {
+  await (await syncDB()).delete('meta', JOURNAL + bookId)
+}
+
+export async function journalEntries(): Promise<ImportJournal[]> {
+  const database = await syncDB()
+  const out: ImportJournal[] = []
+  for (const key of await database.getAllKeys('meta')) {
+    if (typeof key === 'string' && key.startsWith(JOURNAL)) out.push(await database.get('meta', key) as ImportJournal)
+  }
+  return out
+}
+
 export async function loadSync(bookID: string): Promise<StoredSync | null> {
   return ((await (await syncDB()).get('sync', bookID)) as StoredSync | undefined) ?? null
 }
@@ -174,12 +196,26 @@ interface StoredBytes {
   type: string
 }
 
-/** Blob first; Safari in private mode cannot store a Blob in IndexedDB, then the bytes are stored. */
-async function putFile(database: IDBPDatabase, id: string, file: File) {
+/**
+ * Largest track kept as bytes when the browser cannot store a Blob (specs/015-reader-book-container, FR-05): the bytes
+ * pass through memory whole, so a bigger track is refused instead. The stored form stays the one older versions read.
+ * The value is an assumption until it is measured on an iPad (SC-02).
+ */
+export const MAX_FALLBACK_BYTES = 64 * 1024 * 1024
+
+/** The track could not be stored; the message is for the user. */
+export class AudioStoreError extends Error {}
+
+/** Blob first; Safari in private mode cannot store a Blob in IndexedDB, then the bytes are stored, if small enough. */
+export async function putFile(database: Pick<IDBPDatabase, 'put'>, id: string, file: File) {
   try {
     await database.put('files', file, id)
   } catch (error) {
     if ((error as { name?: string })?.name === 'QuotaExceededError') throw error
+    if (file.size > MAX_FALLBACK_BYTES) {
+      throw new AudioStoreError(`Цей браузер не зберігає аудіо як файл (можливо, приватний перегляд), а доріжка ${file.name} `
+        + `завелика для збереження через пам'ять (${Math.round(file.size / 1048576)} МБ, межа ${MAX_FALLBACK_BYTES / 1048576} МБ).`)
+    }
     await database.put('files', { audioBytes: await file.arrayBuffer(), type: file.type } satisfies StoredBytes, id)
   }
 }

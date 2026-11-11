@@ -3,11 +3,11 @@ import { useEffect, useState } from 'preact/hooks'
 import { effect } from '@preact/signals'
 import { aiServicesOpen, closeTraining, route, trainingOpen } from './router.ts'
 import { testFlags } from './test-mode.ts'
-import { addBook, books, initLibrary, lastError, removeOrphanTranslations, resetAll, seedDemoIfNeeded } from '../core/storage/library.ts'
+import { addBook, books, initLibrary, lastError, resetAll, seedDemoIfNeeded } from '../core/storage/library.ts'
 import { initKey } from '../core/storage/key.ts'
 import { initSaved, removeAllForTests, seedForTests } from '../core/saved/saved.ts'
 import { requestPersistence, storageError } from '../core/storage/db.ts'
-import { removeOrphanAudio } from '../core/audiobook/store.ts'
+import { cleanupAtStart } from '../core/prepared/coordination.ts'
 import { settings } from '../core/storage/settings.ts'
 import { importBook, importFile } from '../core/import/importer.ts'
 import { warmUpVoices } from '../core/speech/system-speech.ts'
@@ -38,8 +38,8 @@ async function start() {
   if (__TEST_MODE__ && testFlags.reset && testFlags.savedWords) seedForTests()
   if (__TEST_MODE__ && testFlags.voice) settings.voiceEngine.value = testFlags.voice
   await seedDemoIfNeeded(loadDemo)
-  await removeOrphanAudio(books.value.map((b) => b.id)).catch(() => {})
-  await removeOrphanTranslations(books.value.map((b) => b.id)).catch(() => {})
+  // Under the import lock, with the stored list of books: an import running in another tab is waited for (specs/015, R021).
+  await cleanupAtStart().catch(() => {})
   if (__TEST_MODE__ && testFlags.importPath) {
     try {
       const response = await fetch(testFlags.importPath)
