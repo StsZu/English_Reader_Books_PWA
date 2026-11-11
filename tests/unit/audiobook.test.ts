@@ -23,7 +23,8 @@ class FakeElement implements MediaElement {
   preload = ''
   plays = 0
   private listeners = new Map<string, Set<() => void>>()
-  constructor(private readonly durationOf: () => number = () => 100) {}
+  /** `lateDuration`: the metadata comes without a duration (NaN); it arrives later only by `durationchange` (reveal()). */
+  constructor(private readonly durationOf: () => number = () => 100, private readonly lateDuration = false) {}
   get src() { return this.source }
   set src(value: string) {
     this.source = value
@@ -33,7 +34,7 @@ class FakeElement implements MediaElement {
     if (value.startsWith('blob:')) {
       setTimeout(() => {
         if (this.source !== value) return
-        this.duration = this.durationOf()
+        if (!this.lateDuration) this.duration = this.durationOf()
         this.emit('loadedmetadata')
       }, 0)
     }
@@ -54,7 +55,12 @@ class FakeElement implements MediaElement {
     this.listeners.get(type)!.add(listener)
   }
   removeEventListener(type: string, listener: () => void) { this.listeners.get(type)?.delete(listener) }
-  emit(type: string) { for (const l of this.listeners.get(type) ?? []) l() }
+  emit(type: string) { for (const l of [...(this.listeners.get(type) ?? [])]) l() }
+  /** The duration becomes known after the metadata, as some engines report it. */
+  reveal(duration = this.durationOf()) {
+    this.duration = duration
+    this.emit('durationchange')
+  }
   advance(seconds: number) {
     this.currentTime += seconds
     this.emit('timeupdate')
@@ -175,6 +181,63 @@ describe('AudiobookPlayer', () => {
     await flush()
     expect(player.track.value).toBe(1)
     expect(player.state.value).toBe('paused')
+  })
+
+  it('takes a duration that comes only with a later durationchange; time, seek and the place stay right', async () => {
+    const bookID = `book-${crypto.randomUUID()}`
+    await addTracks(bookID, ['01.mp3', '02.mp3'].map((n) => file(n)))
+    const lengths = [120, 90]
+    let current = 0
+    const element = new FakeElement(() => lengths[current], true)
+    const player = new AudiobookPlayer(bookID, 'Book', () => element)
+    await player.load()
+    await flush()
+    // Metadata without a duration: nothing is invented, the place stays.
+    expect(player.duration.value).toBe(0)
+    element.reveal()
+    expect(player.duration.value).toBe(120)
+    expect((await listTracks(bookID))[0].duration).toBe(120)
+
+    // A seek to the middle, pause, resume: the later durationchange changes neither the time nor the element's place.
+    player.play()
+    await flush()
+    player.seek(60)
+    element.advance(1)
+    player.pause()
+    await flush()
+    expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 61, rate: 1 })
+    element.reveal(120)
+    expect([player.time.value, element.currentTime]).toEqual([61, 61])
+
+    // Another track opened at 30 s: its metadata has no duration yet, the place is applied; then 90 s arrives.
+    current = 1
+    await player.selectTrack(1, 30)
+    await flush()
+    expect([player.track.value, player.duration.value, element.currentTime, player.time.value]).toEqual([1, 0, 30, 30])
+    element.reveal()
+    expect([player.duration.value, player.time.value, element.currentTime]).toEqual([90, 30, 30])
+    const tracks = await listTracks(bookID)
+    expect(tracks.map((t) => t.duration)).toEqual([120, 90])
+    expect(await loadAudioPosition(bookID)).toEqual({ track: 1, time: 30, rate: 1 })
+  })
+
+  it('a durationchange that is not of the loaded file changes nothing', async () => {
+    const { bookID, element, player } = await playerWith(['01.mp3', '02.mp3'])
+    expect(player.duration.value).toBe(100)
+    // The element holds another source (the silent clip of a tap, or a file already replaced): its duration is not ours.
+    element.src = 'data:audio/wav;base64,AAAA'
+    element.reveal(3)
+    expect(player.duration.value).toBe(100)
+    expect((await listTracks(bookID)).map((t) => t.duration)).toEqual([100, null])
+    // Infinity or NaN never replaces a known duration.
+    player.dispose()
+    const again = new FakeElement(() => 100, true)
+    const other = new AudiobookPlayer(bookID, 'Book', () => again)
+    await other.load()
+    await flush()
+    again.reveal(Infinity)
+    again.reveal(NaN)
+    expect(other.duration.value).toBe(100)
   })
 
   it('applies the speed with pitch kept and saves the measured duration', async () => {

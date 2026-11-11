@@ -2,8 +2,10 @@
 // keyboard shortcuts (specs/003-resume-and-shortcuts).
 import { expect, test, type Page } from '@playwright/test'
 import { demoBook } from '../fixtures/language.ts'
+import { recordAudioEvents } from './audio-events.ts'
 
 const demo = demoBook.title
+recordAudioEvents(test)
 
 /** Silent 8 kHz mono WAV generated in the test (no third-party recordings). */
 function wav(seconds: number): Buffer {

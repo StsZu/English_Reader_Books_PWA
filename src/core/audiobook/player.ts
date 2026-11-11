@@ -102,6 +102,7 @@ export class AudiobookPlayer {
     if (!this.element) {
       const element = this.makeElement()
       element.addEventListener('loadedmetadata', this.onMetadata)
+      element.addEventListener('durationchange', this.onDuration)
       element.addEventListener('timeupdate', this.onTime)
       element.addEventListener('ended', this.onEnded)
       element.addEventListener('playing', this.onPlaying)
@@ -317,7 +318,17 @@ export class AudiobookPlayer {
       audio.currentTime = target
       this.time.value = target
     }
-    const duration = audio.duration
+    this.measure()
+  }
+
+  /** Some engines give the metadata before the duration (NaN) and report it later only by `durationchange`. */
+  private readonly onDuration = () => {
+    if (this.ownsElement) this.measure()
+  }
+
+  /** Takes a finite duration of the loaded file; never touches the time or a pending seek. */
+  private measure() {
+    const duration = this.audio.duration
     if (!Number.isFinite(duration) || duration <= 0) return
     this.duration.value = duration
     const index = this.loaded
@@ -421,6 +432,7 @@ export class AudiobookPlayer {
     this.unload()
     if (this.element) {
       this.element.removeEventListener('loadedmetadata', this.onMetadata)
+      this.element.removeEventListener('durationchange', this.onDuration)
       this.element.removeEventListener('timeupdate', this.onTime)
       this.element.removeEventListener('ended', this.onEnded)
       this.element.removeEventListener('playing', this.onPlaying)
