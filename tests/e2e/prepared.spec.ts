@@ -178,10 +178,11 @@ test('аудіобаза версії 2 з прототипу 013 відкрив
 
 
 /** The same package and audio in one `.polenuk` (specs/015-reader-book-container, R023); `language` overrides the package's. */
-async function polenuk(language?: string) {
+async function polenuk(language?: string, source?: unknown) {
   const [pkgFile, audioFile] = await packageFiles()
   const pkg = JSON.parse(pkgFile.buffer.toString())
   if (language) pkg.language = language
+  if (source) pkg.source = source
   const meta = JSON.stringify({ format: 'reader-book-container', version: 1, package: 'book.reader.json',
     audio: [{ path: `audio/${audioFile.name}`, size: audioFile.buffer.length, sha256: createHash('sha256').update(audioFile.buffer).digest('hex') }] })
   const bytes = zipArchive([['mimetype', CONTAINER_MIMETYPE, false], ['container.json', meta, true],
@@ -211,4 +212,33 @@ test('один файл .polenuk іншої мови не імпортуєтьс
   await page.getByTestId('importPreparedInput').setInputFiles([await polenuk(other)])
   await expect(page.getByText(/Книжку не імпортовано.*підготовлено для мови/)).toBeVisible()
   await expect(page.locator('[data-testid^="book-"]')).toHaveCount(before)
+})
+
+
+test('повторний імпорт — окрема копія «(2)»; джерело в аркуші «Аудіокнига» як дані пакета, адреса без посилання й без запитів', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', (r) => { if (!r.url().startsWith(new URL(page.url() || 'http://localhost').origin)) requests.push(r.url()) })
+  await page.route('https://api.openai.com/**', (route) => route.abort())
+  await page.goto('./?reset')
+  await expect(page.getByText(demoBook.title).first()).toBeVisible()
+  const source = { title: 'Lesson', url: 'https://example.org/lesson?id=1', author: 'Author',
+    contentRights: { basis: 'licence', licence: 'CC BY 4.0', confirmed: true }, acquisition: { method: 'author-download', confirmed: true } }
+  const file = await polenuk(undefined, source)
+  await page.getByTestId('importPreparedInput').setInputFiles([file])
+  await expect(page.getByTestId('readerScroll')).toBeVisible()
+  await page.getByTestId('audioTrackButton').click()
+  const box = page.getByTestId('audioSource')
+  await expect(box).toContainText('за даними пакета, застосунок їх не перевіряв')
+  await expect(box).toContainText('ліцензія (CC BY 4.0) — так зазначив виробник пакета')
+  await expect(page.getByTestId('audioSourceUrl')).toHaveText('https://example.org/lesson?id=1')
+  await expect(box.locator('a')).toHaveCount(0)
+  await page.getByTestId('audioSourceUrl').click()
+  await page.getByTestId('audioSheetDone').click()
+  await page.getByTestId('backButton').click()
+  await page.getByTestId('importPreparedInput').setInputFiles([file])
+  await expect(page.getByTestId('readerScroll')).toBeVisible()
+  await page.getByTestId('backButton').click()
+  await expect(page.getByTestId(`book-${preparedText.title}`)).toBeVisible()
+  await expect(page.getByTestId(`book-${preparedText.title} (2)`)).toBeVisible()
+  expect(requests.filter((u) => u.includes('example.org'))).toEqual([])
 })

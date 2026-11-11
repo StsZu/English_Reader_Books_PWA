@@ -492,3 +492,7 @@
   font-size: 13px;
   line-height: 1.4;
 }
+
+/* Source of a prepared book, as the package states it (specs/015-reader-book-container, R025). */
+.audio-sheet-source ul { margin: 4px 0 0; padding-left: 20px; color: var(--secondary-label); font-size: 15px; }
+.audio-sheet-url { overflow-wrap: anywhere; user-select: text; }

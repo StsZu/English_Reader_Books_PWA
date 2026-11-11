@@ -5,6 +5,7 @@ import { requestPersistence } from '../../core/storage/db.ts'
 import { formatBytes, formatTime } from '../../core/util/format.ts'
 import { Button, ConfirmDialog, FormSheet, IconButton, ProgressSpinner } from '../components/index.ts'
 import type { ReaderModel } from './model.ts'
+import type { BookSource } from '../../core/model/book.ts'
 
 async function freeSpace(): Promise<number | null> {
   try {
@@ -99,6 +100,7 @@ export function AudioSheet({ model }: { model: ReaderModel }) {
           {tracks.length > 0 ? `Аудіо книжки займає ${formatBytes(size)}.` : ''}
           {free !== null ? ` Вільно для застосунку: близько ${formatBytes(free)}.` : ''}
         </p>
+        {model.book.source && <SourceInfo source={model.book.source} />}
         <input ref={input} type="file" multiple accept={AUDIO_ACCEPT} class="library-input" onChange={(e) => void onFiles(e)} data-testid="audioInput" />
       </div>
       <ConfirmDialog open={confirmRemoveAll} style="actionSheet" title="Видалити всі аудіофайли цієї книжки?"
@@ -111,5 +113,29 @@ export function AudioSheet({ model }: { model: ReaderModel }) {
         ]}
         onClose={() => setConfirmRemoveAll(false)} testID="removeAudioDialog" />
     </FormSheet>
+  )
+}
+
+const BASIS = { own: 'власний матеріал', licence: 'ліцензія', permission: 'дозвіл правовласника' } as const
+const WAY = { 'user-file': 'файл користувача', 'author-download': 'завантажено автором', 'platform-permitted': 'дозволеним способом платформи', permission: 'за дозволом' } as const
+
+/**
+ * What the package says about its source (specs/015-reader-book-container, R025). Shown as the package's words, not as
+ * checked facts; the address is plain text — no link, nothing is opened or fetched.
+ */
+function SourceInfo({ source }: { source: BookSource }) {
+  const rights = source.contentRights
+  const way = source.acquisition
+  return (
+    <div class="audio-sheet-source" data-testid="audioSource">
+      <p class="audio-sheet-footnote">Джерело — за даними пакета, застосунок їх не перевіряв:</p>
+      <ul>
+        {source.title && <li>Назва: {source.title}</li>}
+        {source.author && <li>Автор: {source.author}</li>}
+        {source.url && <li>Адреса: <span class="audio-sheet-url" data-testid="audioSourceUrl">{source.url}</span></li>}
+        {rights && <li>Права: {BASIS[rights.basis]}{rights.licence ? ` (${rights.licence})` : ''}{rights.attribution ? `, ${rights.attribution}` : ''}{rights.confirmed ? ' — так зазначив виробник пакета' : ' — виробник пакета не підтвердив'}</li>}
+        {way && <li>Отримано: {WAY[way.method]}{way.detail ? ` (${way.detail})` : ''}{way.confirmed ? ' — так зазначив виробник пакета' : ' — виробник пакета не підтвердив'}</li>}
+      </ul>
+    </div>
   )
 }

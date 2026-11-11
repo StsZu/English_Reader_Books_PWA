@@ -47,6 +47,16 @@ export interface Book {
   chapters: Chapter[]
   /** The EPUB table of contents; missing for TXT and MD, EPUB without one and books imported before 2026-10-28. */
   contents?: ContentsEntry[]
+  /** What a prepared-book package says about its source (specs/015-reader-book-container, R025); not checked by the app. */
+  source?: BookSource
+}
+
+export interface BookSource {
+  title?: string
+  url?: string
+  author?: string
+  contentRights?: { basis: 'own' | 'licence' | 'permission'; licence?: string; attribution?: string; confirmed: boolean }
+  acquisition?: { method: 'user-file' | 'author-download' | 'platform-permitted' | 'permission'; detail?: string; confirmed: boolean }
 }
 
 export interface BookSummary {

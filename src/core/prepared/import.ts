@@ -1,11 +1,11 @@
 // Import of a prepared book (specs/013-prepared-book, D0): `<name>.reader.json` and its audio files chosen together.
 // Everything is checked before anything is written; the book appears in the library only at the end (M9).
-import type { Book, BookSummary } from '../model/book.ts'
+import type { Book, BookSource, BookSummary } from '../model/book.ts'
 import { journalDelete, journalPut, putTracksInOrder, saveSync } from '../audiobook/store.ts'
 import { withImportLock } from './coordination.ts'
 import { ContainerError, matchPackage, openContainer, type ByteSource } from './container.ts'
 import { TranslationStore } from '../ai/translation.ts'
-import { addBook, deleteBook } from '../storage/library.ts'
+import { addBook, deleteBook, uniqueTitle } from '../storage/library.ts'
 import { maxFileSize } from '../import/importer.ts'
 import { sha256File } from '../util/sha256.ts'
 import { PACKAGE_SUFFIX, validatePackage, type ReaderPackage, type StoredSync } from './package.ts'
@@ -72,6 +72,7 @@ export async function importPrepared(files: File[], now = new Date(), hooks: Imp
     importedAt: now.toISOString(),
     chapters: pkg.book.chapters,
     ...(pkg.book.contents ? { contents: pkg.book.contents } : {}),
+    ...(sourceOf((pkg as { source?: unknown }).source)),
   }
   return withImportLock(() => writePrepared(pkg, audio, book, hooks))
 }
@@ -82,6 +83,8 @@ async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hook
     await hooks.afterPhase?.(name, book.id)
   }
   try {
+    // Under the import lock: two imports of the same book get different titles, the older one keeps its own.
+    book.title = await uniqueTitle(book.title)
     await phase('checked')
     const tracks = await putTracksInOrder(book.id, audio)
     await phase('tracks')
@@ -143,4 +146,25 @@ export async function importPreparedSelection(files: File[], now = new Date()): 
   if (files.length === 1 && isContainerFile(files[0])) return importContainer(files[0], now)
   if (files.some(isContainerFile)) throw new Error('Виберіть або один файл .polenuk, або файл .reader.json разом з аудіофайлами.')
   return importPrepared(files, now)
+}
+
+
+const str = (value: unknown) => (typeof value === 'string' && value.trim() ? value.slice(0, 500) : undefined)
+
+/** Only the known fields and values of a package's `source` are kept (R025); anything else is dropped. */
+export function sourceOf(value: unknown): { source?: BookSource } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const v = value as Record<string, unknown>
+  const source: BookSource = {}
+  for (const key of ['title', 'url', 'author'] as const) { const s = str(v[key]); if (s) source[key] = s }
+  const rights = v.contentRights as Record<string, unknown> | undefined
+  if (rights && ['own', 'licence', 'permission'].includes(rights.basis as string) && typeof rights.confirmed === 'boolean') {
+    source.contentRights = { basis: rights.basis as 'own', confirmed: rights.confirmed,
+      ...(str(rights.licence) ? { licence: str(rights.licence) } : {}), ...(str(rights.attribution) ? { attribution: str(rights.attribution) } : {}) }
+  }
+  const way = v.acquisition as Record<string, unknown> | undefined
+  if (way && ['user-file', 'author-download', 'platform-permitted', 'permission'].includes(way.method as string) && typeof way.confirmed === 'boolean') {
+    source.acquisition = { method: way.method as 'user-file', confirmed: way.confirmed, ...(str(way.detail) ? { detail: str(way.detail) } : {}) }
+  }
+  return Object.keys(source).length ? { source } : {}
 }

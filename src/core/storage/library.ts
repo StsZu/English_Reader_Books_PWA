@@ -31,6 +31,18 @@ async function reloadIndex() {
   books.value = asIndex(await getValue('meta', INDEX))
 }
 
+/** Titles of the books as stored now. */
+export async function storedTitles(): Promise<string[]> {
+  return asIndex(await getValue('meta', INDEX)).map((b) => b.title)
+}
+
+/** A title no stored book has: «Title», else «Title (2)», «Title (3)»… (a repeated import is a recognisable copy). */
+export async function uniqueTitle(title: string): Promise<string> {
+  const taken = new Set(await storedTitles())
+  if (!taken.has(title)) return title
+  for (let n = 2; ; n++) if (!taken.has(`${title} (${n})`)) return `${title} (${n})`
+}
+
 /** Ids of the books as stored now (not the list in memory, which another tab may have changed). */
 export async function storedBookIDs(): Promise<string[]> {
   return asIndex(await getValue('meta', INDEX)).map((b) => b.id)
