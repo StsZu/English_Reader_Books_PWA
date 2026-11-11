@@ -158,4 +158,19 @@ S1–S7 — 1–2 дні (оцінка); S5 і S8 залежать від нал
 
 **8.5 — налаштовано 2026-11-11 (користувач), збірку ще не запущено.** Polish-воркер: repository `StsZu/English_Reader_Books_PWA`, branch `main`, Production build `npm run build:pl`, deploy `npx wrangler deploy --config wrangler.pl.jsonc`, root `/`; Previews Base: `npm run build:pl`, `npx wrangler preview --config wrangler.pl.jsonc`; той самий Polish build token. «Disable builds» задано у формі Connect і після збереження лишився увімкненим; активне розгортання — `a3104dec`, нових збірок немає (підтверджено й `wrangler deployments status`, робочий сайт Polish — `cd13372`). Потім користувач вимкнув «Disable builds» і зберіг. Ручного запуску збірки `main` у панелі немає, попередній Retry недоступний; тому збірку обох воркерів запускає push у `main` коміту з цим записом. Далі — 8.6.
 
+**8.6 — перевірено 2026-11-11 (сайт; iPad — відкрито).** Push `main` `aa16155..9d89d8e` запустив обидва воркери; Workers Builds на `9d89d8e`: English — success (`ab27079c-3eab-41df-9f8a-7846d50e3559`), Polish — success (`d4dffb67-a04c-4db4-ab35-94ce152d313c`, перша збірка зі спільного репозиторію). Журнал збірки Polish `d4dffb67` у Cloudflare переглянув користувач: `npm run build:pl`; «Executing user deploy command: npx wrangler deploy --config wrangler.pl.jsonc»; «Success: Deploy command completed»; «Current Version ID: d8d2530e-7139-4af4-9308-ee9975b6e5bb»; «Success! Build completed». Це узгоджується з версією: `d8d2530e-7139-4af4-9308-ee9975b6e5bb`, дата сумісності `2026-10-21` (з `wrangler.pl.jsonc`; autoconfig ставить дату збірки, як у English `2d135b43-9e8a-4a0e-a856-c4e9f8c826af` — `2026-11-10`).
+
+| Робочий сайт | Polish | English |
+|---|---|---|
+| `sw.js` | `9d89d8e` | `9d89d8e` |
+| Заголовок, маніфест | «Polish Reader», `./` | «English Reader», `./` |
+| У JS | `polish-reader`, `pr.`; без `english-reader`, `er.` | `english-reader`, `er.`; без `polish-reader`, `pr.` |
+| Демо | «Latarnik (fragment)» | Sherlock Holmes |
+| Неіснуючий шлях (простий / навігація) | 200 / 200 | 200 / 200 |
+| CSP | є | є |
+
+Простий запит на неіснуючий шлях на робочому Polish з явною конфігурацією — 200, тож 404 у 8.2 був особливістю переглядів. Mac (користувач): у Polish Reader після «Оновити» демо «Latarnik» на місці, у налаштуваннях версія `11.11.2026 07:27 · 9d89d8e`. Це не перевірка iPad.
+
+**Перевірка на iPad обох PWA — 2026-11-11, користувач, дослівно:** «перевірив оба додатка на iPad. Оновив. Все працює.» 8.6 виконано. Відкат Polish: `npx wrangler rollback a3104dec-fd92-4150-b3f6-4d7cd0411352 --name polish-reader-books-pwa`.
+
 Після 8.8 — S9 (гілка 013 містить `wrangler.jsonc` — під час перебазування його прибрати, інакше голий `deploy` English почне брати його замість autoconfig) і питання 4.
