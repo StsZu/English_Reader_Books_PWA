@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R-W0 polenuk</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fff; --fg: #111; --muted: #666; --ok: #0a7a2f; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #aaa; --ok: #4cd964; --bad: #ff6b60; } }
+  body { background: var(--bg); color: var(--fg); font: 17px -apple-system, system-ui, sans-serif; margin: 0 16px 48px; }
+  h1 { font-size: 22px; } section { border-top: 1px solid var(--muted); padding: 12px 0; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; }
+  input[type=file] { font-size: 17px; min-height: 44px; }
+  pre { white-space: pre-wrap; font: 14px ui-monospace, monospace; color: var(--muted); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<h1>R-W0: вибір <code>.polenuk</code> на iPad</h1>
+<p>Тестова сторінка поза застосунком Reader: перевіряє лише вибір файла з різними фільтрами, читання частинами й Web Locks. Нічого не надсилає й не зберігає.</p>
+<section><b>Web Locks:</b> <span id="locks"></span></section>
+<section>
+  <label for="a">1. accept=".polenuk"</label><input id="a" type="file" accept=".polenuk">
+  <label for="b">2. accept=".polenuk,.zip"</label><input id="b" type="file" accept=".polenuk,.zip">
+  <label for="c">3. accept=".polenuk,application/zip,application/octet-stream"</label><input id="c" type="file" accept=".polenuk,application/zip,application/octet-stream">
+  <label for="d">4. без фільтра</label><input id="d" type="file">
+  <label for="e">5. як зараз у Reader: .json і аудіо, кілька файлів</label><input id="e" type="file" multiple accept=".json,application/json,audio/*,.mp3,.m4a,.m4b">
+</section>
+<section><b>Результат:</b><pre id="out">Ще нічого не вибрано.</pre></section>
+<script>
+  const out = document.getElementById('out')
+  const locks = document.getElementById('locks')
+  const hasLocks = !!(navigator.locks && navigator.locks.request)
+  locks.textContent = hasLocks ? 'є' : 'немає'
+  locks.className = hasLocks ? 'ok' : 'bad'
+  const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ')
+  async function describe(input, file) {
+    const lines = [`Поле ${input.id}: ${file.name}`, `розмір ${file.size} байтів, тип «${file.type || '(порожній)'}»`]
+    try {
+      const head = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+      lines.push(`перші 4 байти (slice): ${hex(head)} ${head[0] === 0x50 && head[1] === 0x4b ? '— ZIP' : ''}`)
+      const tailStart = Math.max(0, file.size - 65558)
+      const tail = new Uint8Array(await file.slice(tailStart).arrayBuffer())
+      let eocd = -1
+      for (let i = tail.length - 22; i >= 0; i--) if (tail[i] === 0x50 && tail[i + 1] === 0x4b && tail[i + 2] === 0x05 && tail[i + 3] === 0x06) { eocd = i; break }
+      if (eocd >= 0) {
+        const view = new DataView(tail.buffer, eocd)
+        lines.push(`кінець каталогу знайдено: записів ${view.getUint16(10, true)}, каталог ${view.getUint32(12, true)} байтів`)
+      } else lines.push('кінець каталогу ZIP не знайдено')
+      const mid = new Uint8Array(await file.slice(30, 38).arrayBuffer())
+      lines.push(`ім'я першого запису: ${new TextDecoder().decode(mid)}`)
+    } catch (error) {
+      lines.push(`помилка читання: ${error && error.name} ${error && error.message}`)
+    }
+    return lines.join('\n')
+  }
+  for (const input of document.querySelectorAll('input[type=file]')) {
+    input.addEventListener('change', async () => {
+      const parts = []
+      for (const file of input.files) parts.push(await describe(input, file))
+      out.textContent = parts.join('\n\n') || 'Нічого не вибрано.'
+    })
+  }
+</script>
+</body>
+</html>
