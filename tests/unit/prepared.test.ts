@@ -8,14 +8,16 @@ import {
   buildSyncIndex, editionHash, PACKAGE_FORMAT, PACKAGE_VERSION, sentenceAt, validatePackage, type ReaderPackage,
 } from '../../src/core/prepared/package.ts'
 import { importPrepared } from '../../src/core/prepared/import.ts'
-import { closeAudioDB, listTracks, loadAudioPosition, loadSync, saveSync, trackFile } from '../../src/core/audiobook/store.ts'
+import {
+  closeAudioDB, deleteAudio, listTracks, loadAudioPosition, loadSync, putTracksInOrder, removeOrphanAudio, saveSync, trackFile,
+} from '../../src/core/audiobook/store.ts'
 import { DB_NAME } from '../../src/core/storage/db.ts'
 import { openDB } from 'idb'
 import { TranslationStore } from '../../src/core/ai/translation.ts'
-import { books, loadBook, removeOrphanTranslations, resetAll } from '../../src/core/storage/library.ts'
+import { books, deleteBook, loadBook, removeOrphanTranslations, resetAll } from '../../src/core/storage/library.ts'
 import { Sha256, sha256File } from '../../src/core/util/sha256.ts'
 import { alignWords, normalizeWords } from '../../src/core/prepared/align.ts'
-import { sourceLanguage } from '../../src/core/language.ts'
+import { settingsPrefix, sourceLanguage } from '../../src/core/language.ts'
 import { preparedText } from '../fixtures/language.ts'
 
 const chapters: Chapter[] = [{
@@ -202,38 +204,200 @@ describe('word matching (scripts/make-reader-book.ts)', () => {
   })
 })
 
-describe('audio database version 1 → 2 (specs/013-prepared-book, M5)', () => {
-  it('keeps the tracks, files and listening places written by the app before 013', async () => {
+
+describe('audio and sentence-time databases (specs/013-prepared-book, M5 as changed in S9)', () => {
+  const audioDB = `${DB_NAME}-audio`
+  const syncDB = `${DB_NAME}-sync`
+  const track = { id: 'track-1', name: '01.mp3', size: audio.length, type: 'audio/mpeg', duration: 12.5 }
+
+  const drop = (name: string) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+  })
+
+  /** The audio database as the app wrote it before 013 (version 1), or as the 013 prototype left it (version 2). */
+  async function writeOld(version: 1 | 2) {
     await closeAudioDB()
-    const name = `${DB_NAME}-audio`
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase(name)
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-    })
-    // Exactly what store.ts did before 013: version 1, three stores.
-    const old = await openDB(name, 1, {
+    await drop(audioDB)
+    await drop(syncDB)
+    const old = await openDB(audioDB, version, {
       upgrade(database) {
-        for (const store of ['tracks', 'files', 'positions']) database.createObjectStore(store)
+        for (const store of version === 1 ? ['tracks', 'files', 'positions'] : ['tracks', 'files', 'positions', 'sync']) {
+          database.createObjectStore(store)
+        }
       },
     })
-    const track = { id: 'track-1', name: '01.mp3', size: audio.length, type: 'audio/mpeg', duration: 12.5 }
     await old.put('tracks', [track], 'book-1')
     await old.put('files', file('01.mp3', audio), 'track-1')
     await old.put('positions', { track: 0, time: 7.25, rate: 0.9 }, 'book-1')
+    if (version === 2) await old.put('sync', { '0-0': [['track-1', 1, 2]] }, 'book-1')
     old.close()
+  }
 
+  async function expectAudioKept() {
     expect(await listTracks('book-1')).toEqual([track])
     expect(new Uint8Array(await (await trackFile('track-1'))!.arrayBuffer())).toEqual(audio)
     expect(await loadAudioPosition('book-1')).toEqual({ track: 0, time: 7.25, rate: 0.9 })
+  }
+
+  async function versionOf(name: string): Promise<{ version: number; stores: string[] }> {
+    const database = await openDB(name)
+    const result = { version: database.version, stores: [...database.objectStoreNames].sort() }
+    database.close()
+    return result
+  }
+
+  it('use the names of the build language only', async () => {
+    await writeOld(1)
+    await saveSync('book-1', { '0-0': [['track-1', 1, 2]] })
+    await closeAudioDB()
+    const names = (await indexedDB.databases()).map((d) => d.name).filter((n) => n?.endsWith('-audio') || n?.endsWith('-sync'))
+    const language: string = sourceLanguage
+    const own = language === 'en' ? 'english-reader' : 'polish-reader'
+    expect(names.sort()).toEqual([`${own}-audio`, `${own}-sync`])
+  })
+
+  it('keep the audio of version 1 and do not upgrade it; the time of sentences goes to a database of its own', async () => {
+    await writeOld(1)
+    await expectAudioKept()
     expect(await loadSync('book-1')).toBeNull()
     await saveSync('book-1', { '0-0': [['track-1', 1, 2]] })
     await closeAudioDB()
-    const upgraded = await openDB(name)
-    expect(upgraded.version).toBe(2)
-    expect([...upgraded.objectStoreNames].sort()).toEqual(['files', 'positions', 'sync', 'tracks'])
-    upgraded.close()
-    expect(await listTracks('book-1')).toEqual([track])
+    expect(await versionOf(audioDB)).toEqual({ version: 1, stores: ['files', 'positions', 'tracks'] })
+    expect(await versionOf(syncDB)).toEqual({ version: 1, stores: ['meta', 'sync'] })
+    await expectAudioKept()
     expect(await loadSync('book-1')).toEqual({ '0-0': [['track-1', 1, 2]] })
+  })
+
+  it('after a rollback the app before 013 still opens the audio database (version 1) and finds the tracks', async () => {
+    await writeOld(1)
+    await saveSync('book-1', { '0-0': [['track-1', 1, 2]] })
+    await putTracksInOrder('book-2', [file('02.mp3', audio)])
+    await closeAudioDB()
+    const old = await openDB(audioDB, 1)
+    expect(old.version).toBe(1)
+    expect(await old.get('tracks', 'book-1')).toEqual([track])
+    expect((await old.get('tracks', 'book-2') as unknown[]).length).toBe(1)
+    old.close()
+  })
+
+  it('open the version 2 left by the 013 prototype as it is and copy its sentence times once, without changing it', async () => {
+    await writeOld(2)
+    await expectAudioKept()
+    expect(await loadSync('book-1')).toEqual({ '0-0': [['track-1', 1, 2]] })
+    await closeAudioDB()
+    expect(await versionOf(audioDB)).toEqual({ version: 2, stores: ['files', 'positions', 'sync', 'tracks'] })
+    const legacy = await openDB(audioDB)
+    expect(await legacy.get('sync', 'book-1')).toEqual({ '0-0': [['track-1', 1, 2]] })
+    // A later change in the new database is not overwritten by the old copy on the next launch.
+    legacy.close()
+    await saveSync('book-1', { '0-0': [['track-1', 3, 4]] })
+    await closeAudioDB()
+    expect(await loadSync('book-1')).toEqual({ '0-0': [['track-1', 3, 4]] })
+  })
+
+  it('deleting the audio removes the sentence times, also from the 013 store, and they do not come back', async () => {
+    await writeOld(2)
+    expect(await loadSync('book-1')).not.toBeNull()
+    await deleteAudio('book-1')
+    expect(await listTracks('book-1')).toEqual([])
+    expect(await loadSync('book-1')).toBeNull()
+    await closeAudioDB()
+    expect(await loadSync('book-1')).toBeNull()
+    const legacy = await openDB(audioDB)
+    expect(await legacy.get('sync', 'book-1')).toBeUndefined()
+    legacy.close()
+  })
+
+  it('an import stopped before the book reached the library leaves nothing after the next start', async () => {
+    await writeOld(1)
+    await putTracksInOrder('lost', [file('lost.mp3', audio)])
+    await saveSync('lost', { '0-0': [['x', 1, 2]] })
+    await new TranslationStore('lost').saveForKey(['x'], '0-0')
+    await closeAudioDB()
+    await removeOrphanAudio(['book-1'])
+    await removeOrphanTranslations(['book-1'])
+    expect(await listTracks('lost')).toEqual([])
+    expect(await loadSync('lost')).toBeNull()
+    expect(await new TranslationStore('lost').translationForKey('0-0')).toBeUndefined()
+    await expectAudioKept()
+  })
+})
+
+describe('importing the same prepared book again', () => {
+  beforeEach(async () => {
+    await resetAll()
+  })
+
+  it('makes a second book; deleting one leaves the other with its audio, time and translation', async () => {
+    const pkg = async () => file('test.reader.json', JSON.stringify(await makePackage()), 'application/json')
+    const first = await importPrepared([await pkg(), file('01.mp3', audio)])
+    const second = await importPrepared([await pkg(), file('01.mp3', audio)])
+    expect(first.summary.id).not.toBe(second.summary.id)
+    expect(books.value).toHaveLength(2)
+    await deleteBook(first.summary.id)
+    expect(books.value.map((b) => b.id)).toEqual([second.summary.id])
+    const tracks = await listTracks(second.summary.id)
+    expect(tracks).toHaveLength(1)
+    expect((await loadSync(second.summary.id))?.['0-1']?.[0]?.[0]).toBe(tracks[0].id)
+    expect(await new TranslationStore(second.summary.id).translationForKey('0-1')).toHaveLength(2)
+    expect(await listTracks(first.summary.id)).toEqual([])
+    expect(await loadSync(first.summary.id)).toBeNull()
+  })
+})
+
+describe('the other app on the same origin (isolation of English Reader and Polish Reader)', () => {
+  const language: string = sourceLanguage
+  const other = language === 'en' ? { db: 'polish-reader', prefix: 'pr.' } : { db: 'english-reader', prefix: 'er.' }
+
+  /** Everything in a database: version and every store with its keys and values. */
+  async function snapshot(name: string) {
+    const database = await openDB(name)
+    const stores: Record<string, unknown> = {}
+    for (const store of [...database.objectStoreNames].sort()) {
+      const keys = await database.getAllKeys(store)
+      stores[store] = await Promise.all(keys.map(async (key) => {
+        const value = await database.get(store, key)
+        return [key, value instanceof Blob ? `blob:${value.size}` : value]
+      }))
+    }
+    const result = { version: database.version, stores }
+    database.close()
+    return result
+  }
+
+  it('import, delete, orphan cleanup and reset of this app leave the data of the other app as they were', async () => {
+    expect(settingsPrefix).not.toBe(other.prefix)
+    await closeAudioDB()
+    const main = await openDB(other.db, 1, { upgrade(d) { d.createObjectStore('meta'); d.createObjectStore('translations') } })
+    await main.put('meta', [{ id: 'other-book' }], 'library')
+    await main.put('translations', ['інший'], 'other-book|0-0')
+    main.close()
+    const otherAudio = await openDB(`${other.db}-audio`, 1, {
+      upgrade(d) { for (const store of ['tracks', 'files', 'positions']) d.createObjectStore(store) },
+    })
+    await otherAudio.put('tracks', [{ id: 'other-track', name: 'o.mp3', size: 3, type: 'audio/mpeg', duration: 1 }], 'other-book')
+    await otherAudio.put('files', file('o.mp3', new Uint8Array([7, 7, 7])), 'other-track')
+    await otherAudio.put('positions', { track: 0, time: 2 }, 'other-book')
+    otherAudio.close()
+    const otherSync = await openDB(`${other.db}-sync`, 1, { upgrade(d) { d.createObjectStore('sync'); d.createObjectStore('meta') } })
+    await otherSync.put('sync', { '0-0': [['other-track', 0, 1]] }, 'other-book')
+    otherSync.close()
+    localStorage.setItem(`${other.prefix}fontSize`, '31')
+    const before = [await snapshot(other.db), await snapshot(`${other.db}-audio`), await snapshot(`${other.db}-sync`)]
+
+    await resetAll()
+    const result = await importPrepared([file('test.reader.json', JSON.stringify(await makePackage()), 'application/json'), file('01.mp3', audio)])
+    await deleteBook(result.summary.id)
+    await importPrepared([file('test.reader.json', JSON.stringify(await makePackage()), 'application/json'), file('01.mp3', audio)])
+    await closeAudioDB()
+    await removeOrphanAudio([])
+    await removeOrphanTranslations([])
+    await resetAll()
+    await closeAudioDB()
+
+    expect([await snapshot(other.db), await snapshot(`${other.db}-audio`), await snapshot(`${other.db}-sync`)]).toEqual(before)
+    expect(localStorage.getItem(`${other.prefix}fontSize`)).toBe('31')
   })
 })

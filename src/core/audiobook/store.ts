@@ -21,26 +21,79 @@ export interface AudioPosition {
 }
 
 const AUDIO_DB = `${DB_NAME}-audio`
-/** `sync` (version 2): time of the sentences of a prepared book (specs/013-prepared-book, M5). */
-const STORES = ['tracks', 'files', 'positions', 'sync'] as const
+const STORES = ['tracks', 'files', 'positions'] as const
+/**
+ * Time of the sentences of a prepared book (specs/013-prepared-book, M5 as changed in S9): a database of its own,
+ * so the audio database stays at version 1 and an older version of the app still opens it after a rollback.
+ */
+const SYNC_DB = `${DB_NAME}-sync`
+/** Store that the 013 prototype added to the audio database (version 2); read once, never changed by migration. */
+const LEGACY_SYNC = 'sync'
+const LEGACY_MIGRATED = 'legacySyncCopied'
 
 let dbPromise: Promise<IDBPDatabase> | null = null
+let syncPromise: Promise<IDBPDatabase> | null = null
 
+/**
+ * Opened without a version: a new database is created at version 1 (as before 013), an existing one opens as it is —
+ * also version 2 left by the 013 prototype, which is neither rejected nor downgraded.
+ */
 function db(): Promise<IDBPDatabase> {
-  dbPromise ??= openDB(AUDIO_DB, 2, {
+  dbPromise ??= openDB(AUDIO_DB, undefined, {
     upgrade(database) {
       for (const name of STORES) {
         if (!database.objectStoreNames.contains(name)) database.createObjectStore(name)
       }
     },
+  }).catch((error: unknown) => {
+    // A failed open is not remembered: the next call tries again (S9).
+    dbPromise = null
+    throw error
   })
   return dbPromise
 }
 
-/** Test hook: forget the open connection (simulates a relaunch). */
+function syncDB(): Promise<IDBPDatabase> {
+  syncPromise ??= openDB(SYNC_DB, 1, {
+    upgrade(database) {
+      database.createObjectStore('sync')
+      database.createObjectStore('meta')
+    },
+  }).then(async (database) => {
+    try {
+      await copyLegacySync(database)
+    } catch (error) {
+      database.close()
+      throw error
+    }
+    return database
+  }).catch((error: unknown) => {
+    // A failed open or copy is not remembered: the next call tries again; the copy skips what it already wrote (S9).
+    syncPromise = null
+    throw error
+  })
+  return syncPromise
+}
+
+/** Copies the time of the sentences from the audio database of the 013 prototype, once; the old store stays as it was. */
+async function copyLegacySync(target: IDBPDatabase) {
+  if (await target.get('meta', LEGACY_MIGRATED)) return
+  const audio = await db()
+  if (audio.objectStoreNames.contains(LEGACY_SYNC)) {
+    const keys = await audio.getAllKeys(LEGACY_SYNC)
+    for (const key of keys) {
+      if (await target.get('sync', key) === undefined) await target.put('sync', await audio.get(LEGACY_SYNC, key), key)
+    }
+  }
+  await target.put('meta', true, LEGACY_MIGRATED)
+}
+
+/** Test hook: forget the open connections (simulates a relaunch). */
 export async function closeAudioDB() {
   if (dbPromise) (await dbPromise).close()
+  if (syncPromise) await syncPromise.then((database) => database.close(), () => {})
   dbPromise = null
+  syncPromise = null
 }
 
 export const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'm4b', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac']
@@ -109,11 +162,11 @@ export async function putTracksInOrder(bookID: string, files: File[]): Promise<A
 }
 
 export async function loadSync(bookID: string): Promise<StoredSync | null> {
-  return ((await (await db()).get('sync', bookID)) as StoredSync | undefined) ?? null
+  return ((await (await syncDB()).get('sync', bookID)) as StoredSync | undefined) ?? null
 }
 
 export async function saveSync(bookID: string, sync: StoredSync): Promise<void> {
-  await (await db()).put('sync', sync, bookID)
+  await (await syncDB()).put('sync', sync, bookID)
 }
 
 interface StoredBytes {
@@ -147,7 +200,9 @@ export async function deleteAudio(bookID: string): Promise<void> {
   for (const track of await listTracks(bookID)) await database.delete('files', track.id)
   await database.delete('tracks', bookID)
   await database.delete('positions', bookID)
-  await database.delete('sync', bookID)
+  await (await syncDB()).delete('sync', bookID)
+  // The book is gone: its entry in the store of the 013 prototype must not come back with a later copy.
+  if (database.objectStoreNames.contains(LEGACY_SYNC)) await database.delete(LEGACY_SYNC, bookID)
 }
 
 /**
@@ -163,10 +218,12 @@ export async function removeOrphanAudio(bookIDs: string[]): Promise<void> {
     if (books.has(bookID)) for (const track of await listTracks(bookID)) referenced.add(track.id)
     else await deleteAudio(bookID)
   }
-  for (const store of ['positions', 'sync'] as const) {
-    for (const key of await database.getAllKeys(store)) {
-      if (!books.has(String(key))) await database.delete(store, key)
-    }
+  for (const key of await database.getAllKeys('positions')) {
+    if (!books.has(String(key))) await database.delete('positions', key)
+  }
+  const sync = await syncDB()
+  for (const key of await sync.getAllKeys('sync')) {
+    if (!books.has(String(key))) await sync.delete('sync', key)
   }
   for (const key of await database.getAllKeys('files')) {
     if (!referenced.has(String(key))) await database.delete('files', key)
@@ -184,6 +241,8 @@ export async function saveAudioPosition(bookID: string, position: AudioPosition)
 export async function clearAllAudio(): Promise<void> {
   const database = await db()
   for (const name of STORES) await database.clear(name)
+  if (database.objectStoreNames.contains(LEGACY_SYNC)) await database.clear(LEGACY_SYNC)
+  await (await syncDB()).clear('sync')
 }
 
 export const totalSize = (tracks: AudioTrack[]) => tracks.reduce((sum, t) => sum + t.size, 0)
