@@ -74,7 +74,7 @@ export const MIN_TRACK_MATCH = 0.3
 /** Below this share of the heard words found in the text, the recording holds much that the text has not. */
 export const WARN_HEARD_MATCH = 0.6
 
-interface WhisperWord { word: string; start: number; end: number }
+export interface WhisperWord { word: string; start: number; end: number }
 
 /** `plan.json`: `{ "text": "book.epub", "tracks": [{ "audio": "01.mp3", "words": "01.json", "chapters": [1, 2] }] }`. Paths are relative to the plan. */
 export function readPlan(path: string): BookPlan {
@@ -156,7 +156,7 @@ export function checkTranslation(chapters: Chapter[], value: unknown): string[] 
   return problems
 }
 
-function readWords(path: string, label: string): WhisperWord[] {
+export function readWords(path: string, label: string): WhisperWord[] {
   let value: { segments?: Array<{ words?: WhisperWord[] }> }
   try {
     value = JSON.parse(readFileSync(path, 'utf8'))

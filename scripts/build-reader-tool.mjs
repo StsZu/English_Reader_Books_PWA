@@ -1,4 +1,5 @@
 // Builds the versioned reader tool (scripts/reader-tool.ts) for both languages and publishes them as one package
+// into the root of its protocol (build/reader-tool for 1, build/reader-tool-p<N> later)
 // (specs/013-prepared-book, D2c). Each build goes to its own staging folder; the finished folder becomes
 // build/reader-tool/versions/<id>/ and only then build/reader-tool/manifest.json is replaced by one rename, so a reader
 // of the manifest sees either the whole old package or the whole new one, also when two builds run at once.
@@ -8,11 +9,13 @@ import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { build } from 'esbuild'
 
-const root = 'build/reader-tool'
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
 const dirty = git('status', '--porcelain', '--', 'src', 'scripts', 'package.json', 'package-lock.json') !== ''
 const commit = `${git('rev-parse', '--short', 'HEAD')}${dirty ? '+changed' : ''}`
 const protocol = Number(/TOOL_PROTOCOL = (\d+)/.exec(readFileSync('scripts/reader-tool.ts', 'utf8'))[1])
+// Each protocol has its own root with its own manifest.json: an older converter adapter reads build/reader-tool
+// (protocol 1) and refuses a newer manifest before it checks its pin, so that root is never overwritten by protocol 2.
+const root = protocol === 1 ? 'build/reader-tool' : `build/reader-tool-p${protocol}`
 
 mkdirSync(`${root}/versions`, { recursive: true })
 const staging = `${root}/.staging-${randomUUID()}`

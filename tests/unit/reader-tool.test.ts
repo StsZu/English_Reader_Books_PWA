@@ -1,8 +1,9 @@
-// The versioned reader tool for the converter (specs/013-prepared-book, D2c): build/reader-tool/reader-book-<lang>.mjs,
-// built by scripts/build-reader-tool.mjs and run here as the converter runs it, with synthetic data of the build language.
+// The versioned reader tool for the converter (specs/013-prepared-book D2c; protocol 2 — specs/015-reader-book-container):
+// build/reader-tool-p2/…/reader-book-<lang>.mjs, built by scripts/build-reader-tool.mjs and run here as the converter
+// runs it; the commands of protocol 1 are checked against this build too. Synthetic data of the build language.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -10,6 +11,9 @@ import { sourceLanguage } from '../../src/core/language.ts'
 import { preparedChapters } from '../fixtures/language.ts'
 
 let tool = ''
+const ROOT = 'build/reader-tool-p2'
+const ROOT_P1 = 'build/reader-tool/manifest.json'
+let protocolOne: Buffer | null = null
 let dir: string
 const at = (name: string) => join(dir, name)
 
@@ -37,8 +41,9 @@ function whisper(chapters: number[]) {
 }
 
 beforeAll(() => {
+  protocolOne = existsSync(ROOT_P1) ? readFileSync(ROOT_P1) : null
   execFileSync(process.execPath, ['scripts/build-reader-tool.mjs'], { stdio: 'pipe' })
-  tool = join('build', 'reader-tool', JSON.parse(readFileSync('build/reader-tool/manifest.json', 'utf8')).tools[sourceLanguage].file)
+  tool = join(ROOT, JSON.parse(readFileSync(`${ROOT}/manifest.json`, 'utf8')).tools[sourceLanguage].file)
   dir = mkdtempSync(join(tmpdir(), 'reader-tool-'))
   writeFileSync(at('book.md'), `# Book\n\n${preparedChapters.map((c) => `## ${c.heading}\n\n${c.sentences.join(' ')}\n`).join('\n')}`)
 }, 60_000)
@@ -46,22 +51,24 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 describe(`reader tool (${sourceLanguage})`, () => {
   it('names its protocol, language and the hash written in the manifest', () => {
-    expect(call('version')).toMatchObject({ ok: true, tool: 'reader-book', protocol: 1, language: sourceLanguage, translationLanguage: 'uk', format: 'reader-book', formatVersion: 1 })
-    const manifest = JSON.parse(readFileSync('build/reader-tool/manifest.json', 'utf8'))
+    expect(call('version')).toMatchObject({ ok: true, tool: 'reader-book', protocol: 2, language: sourceLanguage, translationLanguage: 'uk', format: 'reader-book', formatVersion: 1 })
+    const manifest = JSON.parse(readFileSync(`${ROOT}/manifest.json`, 'utf8'))
     expect(manifest.tools[sourceLanguage].sha256).toBe(createHash('sha256').update(readFileSync(tool)).digest('hex'))
   })
 
   it('publishes both languages as one package: a repeated build changes nothing, no staging is left', () => {
-    const first = readFileSync('build/reader-tool/manifest.json', 'utf8')
+    const first = readFileSync(`${ROOT}/manifest.json`, 'utf8')
     execFileSync(process.execPath, ['scripts/build-reader-tool.mjs'], { stdio: 'pipe' })
-    const manifest = JSON.parse(readFileSync('build/reader-tool/manifest.json', 'utf8'))
-    expect(readFileSync('build/reader-tool/manifest.json', 'utf8')).toBe(first)
+    const manifest = JSON.parse(readFileSync(`${ROOT}/manifest.json`, 'utf8'))
+    expect(readFileSync(`${ROOT}/manifest.json`, 'utf8')).toBe(first)
+    // The root of protocol 1 (the older converter adapter reads it) is not touched by a build of protocol 2.
+    if (protocolOne) expect(readFileSync(ROOT_P1)).toEqual(protocolOne)
     for (const language of ['en', 'pl']) {
-      const file = join('build/reader-tool', manifest.tools[language].file)
+      const file = join(ROOT, manifest.tools[language].file)
       expect(file).toContain(`versions/${manifest.version}/`)
       expect(createHash('sha256').update(readFileSync(file)).digest('hex')).toBe(manifest.tools[language].sha256)
     }
-    expect(readdirSync('build/reader-tool').filter((n) => n.startsWith('.'))).toEqual([])
+    expect(readdirSync(ROOT).filter((n) => n.startsWith('.'))).toEqual([])
   }, 60_000)
 
   it('lists the chapters of the book with a preview of each', () => {

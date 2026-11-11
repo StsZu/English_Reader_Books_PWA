@@ -8,17 +8,23 @@
 //   node reader-book-<lang>.mjs template --text book.epub --tracks "1,2;3" --out base   → base.translation.json
 //   node reader-book-<lang>.mjs build --plan plan.json --translation uk.json --out book.reader.json [--report r.md]
 //   node reader-book-<lang>.mjs validate --package book.reader.json [--audio-dir dir]
+// Protocol 2 (specs/015-reader-book-container, for specs/004-mp3-reader-book):
+//   node reader-book-<lang>.mjs sentences --plan plan-v2.json --out sentences.json
+//   node reader-book-<lang>.mjs build-sentences --sentences sentences.json --translations uk.json [--source source.json] --out book.reader.json
+//   node reader-book-<lang>.mjs validate-container --container book.polenuk
 import { createHash } from 'node:crypto'
-import { createReadStream, readFileSync, statSync } from 'node:fs'
+import { closeSync, createReadStream, fstatSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { formatForExtension, importBook, maxFileSize } from '../src/core/import/importer.ts'
 import { ImportError } from '../src/contracts.ts'
 import { sourceLanguage } from '../src/core/language.ts'
 import { PACKAGE_FORMAT, PACKAGE_VERSION, TRANSLATION_LANGUAGE, validatePackage, type ReaderPackage } from '../src/core/prepared/package.ts'
-import { BuildError, makeReaderBook, readPlan } from './reader-book.ts'
+import { BuildError, makeReaderBook, readPlan, writeFileAtomic } from './reader-book.ts'
+import { buildFromSentences, makeSentences, readPlanV2 } from './reader-sentences.ts'
+import { ContainerError, matchPackage, openContainer, verifyAudio, type ByteSource } from '../src/core/prepared/container.ts'
 
 /** Changes when a command, an option or the shape of an answer changes; the converter pins it. */
-export const TOOL_PROTOCOL = 1
+export const TOOL_PROTOCOL = 2
 declare const __TOOL_COMMIT__: string
 const commit = typeof __TOOL_COMMIT__ === 'string' ? __TOOL_COMMIT__ : 'dev'
 
@@ -129,8 +135,47 @@ async function run(command: string | undefined, rest: string[]): Promise<Record<
       }
       return { valid: problems.length === 0, problems, tracks }
     }
+    case 'sentences': {
+      need(o, 'plan', 'out')
+      const file = await makeSentences(readPlanV2(o.plan))
+      writeFileAtomic(o.out, JSON.stringify(file))
+      return { path: o.out, sentences: file.sentences.length, timed: file.sentences.filter((s) => s.start !== null).length, tracks: file.tracks }
+    }
+    case 'build-sentences': {
+      need(o, 'sentences', 'translations', 'out')
+      return await buildFromSentences({ sentences: o.sentences, translations: o.translations, source: o.source, out: o.out, id: o.id })
+    }
+    case 'validate-container': {
+      need(o, 'container')
+      const fd = openSync(o.container, 'r')
+      try {
+        const src: ByteSource = {
+          size: fstatSync(fd).size,
+          read: async (start, end) => {
+            const out = new Uint8Array(end - start)
+            readSync(fd, out, 0, out.length, start)
+            return out
+          },
+        }
+        let opened
+        try {
+          opened = await openContainer(src)
+        } catch (error) {
+          if (error instanceof ContainerError) return { valid: false, problems: [error.message] }
+          throw error
+        }
+        const problems = await validatePackage(opened.package)
+        if (!problems.length) problems.push(...matchPackage(opened, opened.package as ReaderPackage))
+        if (!problems.length) {
+          for (const audio of opened.audio) if (!(await verifyAudio(src, audio))) problems.push(`Аудіо «${audio.path}»: SHA-256 не збігається.`)
+        }
+        return { valid: problems.length === 0, problems, tracks: opened.audio.map((a) => ({ name: a.name, size: a.size })) }
+      } finally {
+        closeSync(fd)
+      }
+    }
     default:
-      throw new InputError('Команди: version, chapters, template, build, validate.')
+      throw new InputError('Команди: version, chapters, template, build, validate, sentences, build-sentences, validate-container.')
   }
 }
 
