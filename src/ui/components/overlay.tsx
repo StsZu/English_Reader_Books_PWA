@@ -45,12 +45,22 @@ const focusableSelector =
 
 /** Esc closes; Tab stays inside the container; focus returns to the opener on close. */
 export function useDialogFocus(active: boolean, container: { current: HTMLElement | null }, onEscape?: () => void) {
-  useEffect(() => {
+  // The opener is read while rendering, before any layout effect of the content can move the focus inside.
+  const opener = useRef<HTMLElement | null>(null)
+  const wasActive = useRef(false)
+  if (active && !wasActive.current && typeof document !== 'undefined') opener.current = document.activeElement as HTMLElement | null
+  wasActive.current = active
+  // A layout effect: the first focus is set while the overlay is drawn, not a frame later, so it never takes the field
+  // from input that started at once (R026 en-2). Focus the content already put inside on purpose is left where it is.
+  useLayoutEffect(() => {
     if (!active) return
-    const previous = document.activeElement as HTMLElement | null
     const node = container.current
-    const first = node?.querySelector<HTMLElement>('[data-autofocus]') ?? node?.querySelector<HTMLElement>(focusableSelector)
-    first?.focus({ preventScroll: true })
+    const current = document.activeElement as HTMLElement | null
+    const previous = opener.current
+    if (!(node && current && node.contains(current))) {
+      const first = node?.querySelector<HTMLElement>('[data-autofocus]') ?? node?.querySelector<HTMLElement>(focusableSelector)
+      first?.focus({ preventScroll: true })
+    }
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && onEscape) {
         event.preventDefault()
