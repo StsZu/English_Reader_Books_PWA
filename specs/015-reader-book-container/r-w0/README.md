@@ -8,12 +8,10 @@
    ```zsh
    python3 -I make_test_containers.py <тека> <пакет.reader.json> <тека з MP3> [<пакет2> <тека2>]
    ```
-   Готові файли асистента: `lekcja-druga-pl.polenuk`, `lekcja-druga-pl.zip`, `cat-and-mouse-en.polenuk`, `cat-and-mouse-en.zip` (однаковий вміст для `.polenuk` і `.zip`).
+   Готові файли асистента (2026-11-11) — у `build/r-w0-containers/` цього репозиторію (тека в `.gitignore`, у git не потрапляє): `lekcja-druga-pl.polenuk`, `lekcja-druga-pl.zip`, `cat-and-mouse-en.polenuk`, `cat-and-mouse-en.zip` (однаковий вміст для `.polenuk` і `.zip`; усі чотири проходять `validate-container` інструмента `f048707`).
 2. Тестова сторінка `index.html` у цій теці — лише для поля вибору файла; без мережі, без збереження. Локально, без розгортання:
-   ```zsh
-   cd specs/015-reader-book-container/r-w0 && python3 -m http.server 8765 --bind 0.0.0.0
-   ```
-   На iPad у Safari: `http://<ім'я-Mac>.local:8765/` (Mac і iPad в одній мережі). Після перевірки сервер зупинити (Ctrl-C).
+   Сторінку ще не запущено. Щоб iPad її побачив, потрібен сервер у локальній мережі (`python3 -m http.server 8765 --bind 0.0.0.0` у цій теці, адреса `http://<ім'я-Mac>.local:8765/`) — це відкриває порт для всієї мережі й **потребує окремого дозволу**. Без нього можна перевірити лише «Файли» (пункти 1–4 нижче); поля вибору (пункти 5–6) — після дозволу або іншого погодженого способу.
+   Встановлені English Reader і Polish Reader контейнер **ще не підтримують** (імпорт — R023); перевіряти вибір у них зараз не треба.
 
 ## Що перевірити на iPad і записати дослівно
 
