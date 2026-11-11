@@ -36,3 +36,10 @@ export const preparedText = {
   /** The same words as Whisper writes them: other case, other punctuation. */
   heard: 'żółw szedł powoli mysz uciekła źrebięciu',
 }
+
+/** A synthetic prepared book of three chapters for several tracks (specs/013-prepared-book, D2a). */
+export const preparedChapters = [
+  { heading: 'Jeden', sentences: ['Żółw szedł powoli.', 'Mysz uciekła źrebięciu.'] },
+  { heading: 'Dwa', sentences: ['Pies głośno szczekał.', 'Ptak odleciał daleko.'] },
+  { heading: 'Trzy', sentences: ['Deszcz padał całą noc.', 'Wreszcie nadszedł ranek.'] },
+] as const

@@ -9,10 +9,34 @@ export function normalizeWords(text: string): string[] {
 }
 
 /**
- * Longest common subsequence of the two word lists: pairs [book word, heard word]. Time and memory grow with
- * the product of the lengths, so it is meant for a chapter, not a whole book at once.
+ * Largest table `alignWords` builds: 4 bytes a cell, about 160 MB. A chapter of half an hour (about 4 500 words
+ * read and heard) needs about 20 million cells; a track of two hours does not fit and has to be split.
  */
-export function alignWords(a: readonly string[], b: readonly string[]): Array<[number, number]> {
+export const MAX_ALIGN_CELLS = 40_000_000
+
+/** Cells of the table for matching `bookWords` with `heardWords`. */
+export function alignmentCells(bookWords: number, heardWords: number): number {
+  return (bookWords + 1) * (heardWords + 1)
+}
+
+export class AlignmentTooLarge extends Error {
+  readonly cells: number
+  readonly limit: number
+  constructor(cells: number, limit: number) {
+    super(`Зіставлення потребує ${cells} клітинок таблиці, більше за межу ${limit}.`)
+    this.cells = cells
+    this.limit = limit
+  }
+}
+
+/**
+ * Longest common subsequence of the two word lists: pairs [book word, heard word]. Time and memory grow with
+ * the product of the lengths, so it is meant for a chapter, not a whole book at once: above `limit` cells
+ * it throws `AlignmentTooLarge` before taking the memory.
+ */
+export function alignWords(a: readonly string[], b: readonly string[], limit = MAX_ALIGN_CELLS): Array<[number, number]> {
+  const cells = alignmentCells(a.length, b.length)
+  if (cells > limit) throw new AlignmentTooLarge(cells, limit)
   const width = b.length + 1
   const table = new Uint32Array((a.length + 1) * width)
   for (let i = a.length - 1; i >= 0; i--) {
