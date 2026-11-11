@@ -78,6 +78,8 @@ describe('container: refused before anything is imported (≥ 15 cases)', () => 
     const list = entries()
     await refused(zipArchive([list[1], list[0], ...list.slice(2)]), /перший запис має бути mimetype/)
     list[0] = ['mimetype', 'application/zip', false]
+    await refused(zipArchive(list), /mimetype іншого розміру/)
+    list[0] = ['mimetype', 'application/vnd.reader-book+zap', false]          // same length, other type
     await refused(zipArchive(list), /інший тип вмісту/)
   })
   it('a newer container version', async () => {
@@ -133,7 +135,7 @@ describe('container: refused before anything is imported (≥ 15 cases)', () => 
   it('an MP3 listed but missing', async () => {
     const list = entries().filter(([p]) => p !== 'audio/02.mp3')
     list.push(['audio/03.mp3', mp3[1], false])
-    await refused(zipArchive(list), /немає у файлі книжки/)
+    await refused(zipArchive(list), /не збігаються з його описом/)
   })
   it('a local header that does not match the directory', async () => {
     const bytes = zipArchive(entries())
@@ -141,5 +143,115 @@ describe('container: refused before anything is imported (≥ 15 cases)', () => 
     const offset = bytes[records[3] + 42] | (bytes[records[3] + 43] << 8)
     put16(bytes, offset + 8, 8)
     await refused(bytes, /не збігається з каталогом/)
+  })
+})
+
+
+// ----------------------------------------------------------------- regressions of review 2026-11-11
+
+/** The source records the largest single read it was asked for. */
+function measured(bytes: Uint8Array, size = bytes.length) {
+  const log = { largest: 0 }
+  const src: ByteSource = {
+    size,
+    read: async (a, b) => {
+      log.largest = Math.max(log.largest, b - a)
+      const out = new Uint8Array(b - a)
+      const from = size - bytes.length
+      for (let i = Math.max(a, from); i < Math.min(b, size); i++) out[i - a] = bytes[i - from]
+      return out
+    },
+  }
+  return { src, log }
+}
+
+/** Offset of the end-of-central-directory record. */
+const eocd = (bytes: Uint8Array) => { for (let i = bytes.length - 22; i >= 0; i--) if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 5 && bytes[i + 3] === 6) return i; return -1 }
+const localOf = (bytes: Uint8Array, record: number) => bytes[record + 42] | (bytes[record + 43] << 8) | (bytes[record + 44] << 16) | (bytes[record + 45] << 24)
+
+describe('container: sizes from the file are checked before any read (P1)', () => {
+  const HUGE = 512 * 1024 * 1024
+
+  it('a central directory claimed far larger than its records allow is never read', async () => {
+    const bytes = zipArchive(entries())
+    const prefix = HUGE + 4096
+    // The archive sits at the end of a big virtual file; the directory "starts" 512 MiB before the end record.
+    const end = eocd(bytes)
+    put32(bytes, end + 12, HUGE)
+    put32(bytes, end + 16, prefix + end - HUGE)
+    const { src, log } = measured(bytes, prefix + bytes.length)
+    await expect(openContainer(src)).rejects.toThrow(/розмір каталогу ZIP неправдоподібний/)
+    expect(log.largest).toBeLessThan(70_000)
+  })
+
+  it('a deflated JSON of 2 bytes that claims 512 MiB packed is refused unread', async () => {
+    const bytes = zipArchive(entries())
+    const record = central(bytes)[2]                      // book.reader.json
+    put32(bytes, record + 24, 2)
+    put32(bytes, record + 20, HUGE)
+    const { src, log } = measured(bytes)
+    await expect(openContainer(src)).rejects.toThrow(/неправдоподібний стиснений розмір/)
+    expect(log.largest).toBeLessThan(70_000)
+  })
+
+  it('a mimetype record that claims 512 MiB is refused unread', async () => {
+    const bytes = zipArchive(entries())
+    put32(bytes, central(bytes)[0] + 20, HUGE)
+    const { src, log } = measured(bytes)
+    await expect(openContainer(src)).rejects.toThrow(/mimetype іншого розміру/)
+    expect(log.largest).toBeLessThan(70_000)
+  })
+
+  it('a valid container reads nothing larger than one MP3 piece', async () => {
+    const { src, log } = measured(zipArchive(entries()))
+    const opened = await openContainer(src)
+    for (const audio of opened.audio) expect(await verifyAudio(src, audio, 4)).toBe(true)
+    expect(log.largest).toBeLessThan(70_000)
+  })
+})
+
+describe('container: the local header must say what the directory says (P2)', () => {
+  it('another uncompressed size in the local header of an MP3', async () => {
+    const bytes = zipArchive(entries())
+    const local = localOf(bytes, central(bytes)[3])
+    put32(bytes, local + 22, 999)
+    await refused(bytes, /не збігається з каталогом/)
+  })
+
+  it('another CRC in the local header than in the directory', async () => {
+    const bytes = zipArchive(entries())
+    const local = localOf(bytes, central(bytes)[3])
+    put32(bytes, local + 14, 1)
+    await refused(bytes, /не збігається з каталогом/)
+  })
+
+  it('another packed size or flags in the local header', async () => {
+    const packed = zipArchive(entries())
+    put32(packed, localOf(packed, central(packed)[3]) + 18, 4)
+    await refused(packed, /не збігається з каталогом/)
+    const flags = zipArchive(entries())
+    put16(flags, localOf(flags, central(flags)[3]) + 6, 0x800)
+    await refused(flags, /не збігається з каталогом/)
+  })
+})
+
+describe('container: description, audio records and package name the same files once (P2)', () => {
+  it('the description lists one MP3 twice while the archive holds another one unlisted', async () => {
+    const twice = JSON.stringify({ format: 'reader-book-container', version: 1, package: 'book.reader.json',
+      audio: [{ path: 'audio/01.mp3', size: 6, sha256: tracks[0].sha256 }, { path: 'audio/01.mp3', size: 6, sha256: tracks[0].sha256 }] })
+    const list: Entry[] = [['mimetype', CONTAINER_MIMETYPE, false], ['container.json', twice, true],
+      ['book.reader.json', JSON.stringify(pkg), true], ['audio/01.mp3', mp3[0], false], ['audio/unlisted.mp3', mp3[1], false]]
+    await refused(zipArchive(list), /аудіо повторюється/)
+  })
+
+  it('an unlisted MP3 instead of a listed one', async () => {
+    const list = entries()
+    list[4] = ['audio/other.mp3', mp3[1], false]
+    await refused(zipArchive(list), /не збігаються з його описом/)
+  })
+
+  it('a package with two tracks of one name', async () => {
+    const opened = await openContainer(source(zipArchive(entries())))
+    expect(matchPackage(opened, { tracks: [tracks[0], { ...tracks[1], id: 'x', name: '01.mp3' }] })).toEqual(['У пакеті дві доріжки з однією назвою аудіо.'])
   })
 })

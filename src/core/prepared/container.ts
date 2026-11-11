@@ -13,6 +13,11 @@ export const CONTAINER_META = 'container.json'
 export const MAX_CONTAINER_TRACKS = 200
 /** Unpacked to packed size of a deflated entry: more is treated as a zip bomb. */
 export const MAX_DEFLATE_RATIO = 100
+/** Longest entry name and extra field accepted; entry comments are not accepted. Bounds every read before it is made. */
+export const MAX_NAME = 1024
+export const MAX_EXTRA = 1024
+const CENTRAL_RECORD = 46
+const MIMETYPE_BYTES = new TextEncoder().encode(CONTAINER_MIMETYPE).length
 
 /** Bytes of the container: a File in the app, a file on disk in the tool. `read` returns [start, end). */
 export interface ByteSource {
@@ -43,6 +48,7 @@ interface Entry {
   path: string
   method: number
   flags: number
+  crc: number
   packed: number
   size: number
   localOffset: number
@@ -65,7 +71,24 @@ export function safePath(path: string): boolean {
   return path === 'mimetype' || path === CONTAINER_META || path === CONTAINER_PACKAGE || AUDIO.test(path)
 }
 
-async function readEntries(src: ByteSource): Promise<{ entries: Entry[]; centralStart: number }> {
+/** Sizes an entry may claim, checked before any of its bytes are read. */
+function checkSizes(entry: Entry, maxJSON: number) {
+  if (entry.path === 'mimetype') {
+    if (entry.method !== 0 || entry.packed !== MIMETYPE_BYTES || entry.size !== MIMETYPE_BYTES) fail('Це не книжка в одному файлі: запис mimetype іншого розміру.')
+  } else if (entry.path === CONTAINER_META || entry.path === CONTAINER_PACKAGE) {
+    if (entry.method !== 0 && entry.method !== 8) fail(`Запис «${entry.path}» стиснуто непідтримуваним способом.`)
+    if (entry.size > maxJSON) fail(`Запис «${entry.path}» завеликий.`)
+    if (entry.method === 0 && entry.packed !== entry.size) fail('Файл книжки пошкоджено: розмір запису.')
+    // Deflate never needs much more than the data itself; a larger packed size is a lie about the content.
+    if (entry.method === 8 && entry.packed > entry.size + 1024 + Math.ceil(entry.size / 100)) fail(`Запис «${entry.path}» має неправдоподібний стиснений розмір.`)
+    if (entry.method === 8 && entry.size > entry.packed * MAX_DEFLATE_RATIO) fail(`Запис «${entry.path}» стиснуто підозріло сильно.`)
+  } else {
+    if (entry.method !== 0) fail(`Аудіо «${entry.path}» має бути без стиснення.`)
+    if (entry.packed !== entry.size) fail('Файл книжки пошкоджено: розмір аудіо.')
+  }
+}
+
+async function readEntries(src: ByteSource, maxJSON: number): Promise<{ entries: Entry[]; centralStart: number }> {
   if (src.size < 22) fail('Файл замалий для книжки в одному файлі.')
   const tailStart = Math.max(0, src.size - 65_557)
   const tail = await src.read(tailStart, src.size)
@@ -81,6 +104,9 @@ async function readEntries(src: ByteSource): Promise<{ entries: Entry[]; central
   if (count === 0xffff || centralSize === 0xffffffff || centralStart === 0xffffffff) fail('ZIP64 не підтримується: файл завеликий для цієї версії.')
   if (count > MAX_CONTAINER_TRACKS + 3) fail('Забагато записів у файлі книжки.')
   if (centralStart + centralSize > tailStart + eocd) fail('Файл книжки пошкоджено: каталог ZIP виходить за межі.')
+  if (centralSize < count * CENTRAL_RECORD || centralSize > count * (CENTRAL_RECORD + MAX_NAME + MAX_EXTRA)) {
+    fail('Файл книжки пошкоджено: розмір каталогу ZIP неправдоподібний.')
+  }
   const central = await src.read(centralStart, centralStart + centralSize)
   const entries: Entry[] = []
   let at = 0
@@ -88,12 +114,15 @@ async function readEntries(src: ByteSource): Promise<{ entries: Entry[]; central
     if (at + 46 > central.length || u32(central, at) !== 0x02014b50) fail('Файл книжки пошкоджено: каталог ZIP.')
     const flags = u16(central, at + 8)
     const method = u16(central, at + 10)
+    const crc = u32(central, at + 16)
     const packed = u32(central, at + 20)
     const size = u32(central, at + 24)
     const nameLength = u16(central, at + 28)
     const extraLength = u16(central, at + 30)
     const commentLength = u16(central, at + 32)
     const localOffset = u32(central, at + 42)
+    if (nameLength > MAX_NAME || extraLength > MAX_EXTRA || commentLength !== 0) fail('Файл книжки має запис з неприпустимим заголовком.')
+    if (at + CENTRAL_RECORD + nameLength + extraLength > central.length) fail('Файл книжки пошкоджено: каталог ZIP.')
     let path: string
     try {
       path = utf8.decode(central.subarray(at + 46, at + 46 + nameLength))
@@ -104,7 +133,9 @@ async function readEntries(src: ByteSource): Promise<{ entries: Entry[]; central
     if (flags & 0x1) fail('Зашифрований файл книжки не підтримується.')
     if (flags & 0x8) fail('Файл книжки записано з дескрипторами даних; такий формат не підтримується.')
     if (!safePath(path)) fail(`Неприпустимий запис у файлі книжки: «${path}».`)
-    entries.push({ path, method, flags, packed, size, localOffset, dataStart: 0 })
+    const entry = { path, method, flags, crc, packed, size, localOffset, dataStart: 0 }
+    checkSizes(entry, maxJSON)
+    entries.push(entry)
     at += 46 + nameLength + extraLength + commentLength
   }
   const seen = new Set<string>()
@@ -123,8 +154,11 @@ async function locate(src: ByteSource, entries: Entry[], centralStart: number) {
     if (u32(header, 0) !== 0x04034b50) fail('Файл книжки пошкоджено: заголовок запису.')
     const nameLength = u16(header, 26)
     const extraLength = u16(header, 28)
+    if (nameLength > MAX_NAME || extraLength > MAX_EXTRA) fail('Файл книжки має запис з неприпустимим заголовком.')
     const name = await src.read(entry.localOffset + 30, entry.localOffset + 30 + nameLength)
-    if (new TextDecoder().decode(name) !== entry.path || u16(header, 8) !== entry.method || (u16(header, 6) & 0x9) !== 0) {
+    // Every field the reader relies on must say the same in the local header and in the directory.
+    if (new TextDecoder().decode(name) !== entry.path || u16(header, 6) !== entry.flags || u16(header, 8) !== entry.method
+      || u32(header, 14) !== entry.crc || u32(header, 18) !== entry.packed || u32(header, 22) !== entry.size) {
       fail('Файл книжки пошкоджено: заголовок запису не збігається з каталогом.')
     }
     entry.dataStart = entry.localOffset + 30 + nameLength + extraLength
@@ -136,11 +170,8 @@ async function locate(src: ByteSource, entries: Entry[], centralStart: number) {
   }
 }
 
-async function readJSON(src: ByteSource, entry: Entry, maxSize: number): Promise<unknown> {
-  if (entry.method !== 0 && entry.method !== 8) fail(`Запис «${entry.path}» стиснуто непідтримуваним способом.`)
-  if (entry.size > maxSize) fail(`Запис «${entry.path}» завеликий.`)
-  if (entry.method === 0 && entry.packed !== entry.size) fail('Файл книжки пошкоджено: розмір запису.')
-  if (entry.method === 8 && entry.size > entry.packed * MAX_DEFLATE_RATIO) fail(`Запис «${entry.path}» стиснуто підозріло сильно.`)
+async function readJSON(src: ByteSource, entry: Entry): Promise<unknown> {
+  // Sizes were checked against the limits before any read (checkSizes).
   const raw = await src.read(entry.dataStart, entry.dataStart + entry.packed)
   let bytes: Uint8Array
   try {
@@ -157,7 +188,7 @@ async function readJSON(src: ByteSource, entry: Entry, maxSize: number): Promise
 
 /** Reads and checks everything except the MP3 bytes (see verifyAudio) and the package itself (validatePackage). */
 export async function openContainer(src: ByteSource, maxJSON = maxFileSize): Promise<OpenedContainer> {
-  const { entries, centralStart } = await readEntries(src)
+  const { entries, centralStart } = await readEntries(src, maxJSON)
   await locate(src, entries, centralStart)
   const byPath = new Map(entries.map((e) => [e.path, e]))
   const mimetype = byPath.get('mimetype')
@@ -166,7 +197,7 @@ export async function openContainer(src: ByteSource, maxJSON = maxFileSize): Pro
   if (new TextDecoder().decode(type) !== CONTAINER_MIMETYPE) fail('Це не книжка в одному файлі: інший тип вмісту.')
   const metaEntry = byPath.get(CONTAINER_META) ?? fail('У файлі книжки немає container.json.')
   const packageEntry = byPath.get(CONTAINER_PACKAGE) ?? fail('У файлі книжки немає book.reader.json.')
-  const meta = await readJSON(src, metaEntry, maxJSON) as Partial<OpenedContainer['meta']> & { audio?: unknown }
+  const meta = await readJSON(src, metaEntry) as Partial<OpenedContainer['meta']> & { audio?: unknown }
   if (!meta || typeof meta !== 'object' || meta.format !== CONTAINER_FORMAT) fail('Опис файла книжки (container.json) пошкоджено.')
   if (typeof meta.version !== 'number' || meta.version > CONTAINER_VERSION) fail(`Файл книжки версії ${String(meta.version)} створено новішою програмою; оновіть застосунок.`)
   if (meta.version !== CONTAINER_VERSION) fail(`Версія файла книжки ${String(meta.version)} не підтримується.`)
@@ -174,6 +205,13 @@ export async function openContainer(src: ByteSource, maxJSON = maxFileSize): Pro
   const listed = Array.isArray(meta.audio) ? meta.audio as Array<Record<string, unknown>> : fail('В описі файла книжки немає аудіо.')
   if (listed.length === 0 || listed.length > MAX_CONTAINER_TRACKS) fail('Кількість аудіо у файлі книжки неприпустима.')
   if (entries.length !== listed.length + 3) fail('У файлі книжки є зайві або відсутні записи.')
+  // The description, the audio records and (later) the package must name exactly the same files, each once.
+  const listedPaths = listed.map((item) => (typeof item?.path === 'string' ? item.path : ''))
+  if (new Set(listedPaths.map((p) => p.toLowerCase())).size !== listedPaths.length) fail('В описі файла книжки аудіо повторюється.')
+  const physical = entries.filter((e) => AUDIO.test(e.path)).map((e) => e.path)
+  if (physical.length !== listedPaths.length || physical.some((p) => !listedPaths.includes(p))) {
+    fail('Аудіо у файлі книжки не збігаються з його описом.')
+  }
   const audio: ContainerAudio[] = []
   for (const item of listed) {
     const path = typeof item?.path === 'string' ? item.path : ''
@@ -184,7 +222,7 @@ export async function openContainer(src: ByteSource, maxJSON = maxFileSize): Pro
     if (typeof item.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(item.sha256)) fail(`Хеш аудіо «${path}» пошкоджено.`)
     audio.push({ name: path.slice('audio/'.length), path, size: entry!.size, sha256: item.sha256 as string, dataStart: entry!.dataStart })
   }
-  const pkg = await readJSON(src, packageEntry, maxJSON)
+  const pkg = await readJSON(src, packageEntry)
   return { meta: meta as OpenedContainer['meta'], package: pkg, audio }
 }
 
@@ -192,6 +230,8 @@ export async function openContainer(src: ByteSource, maxJSON = maxFileSize): Pro
 export function matchPackage(opened: OpenedContainer, pkg: { tracks?: Array<{ name?: unknown; size?: unknown; sha256?: unknown }> }): string[] {
   const tracks = Array.isArray(pkg.tracks) ? pkg.tracks : []
   if (tracks.length !== opened.audio.length) return ['Кількість доріжок у пакеті й у файлі книжки різна.']
+  const names = tracks.map((t) => String(t?.name).toLowerCase())
+  if (new Set(names).size !== names.length) return ['У пакеті дві доріжки з однією назвою аудіо.']
   const problems: string[] = []
   tracks.forEach((track, i) => {
     const audio = opened.audio[i]
