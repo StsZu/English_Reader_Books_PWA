@@ -26,3 +26,13 @@ export const sampleCard: WordCard = {
   headword: 'kobiety', lemma: 'kobieta', ipa: 'kɔˈbjɛta', partOfSpeech: 'іменник, жіночий рід', contextTranslation: 'жінки',
   otherTranslations: ['жінка', 'пані'], note: '', level: 'A1', forms: 'kobieta — kobiety — kobiety', irregular: false,
 }
+
+/** Synthetic text of a prepared book (specs/013-prepared-book): a heading, a paragraph of two sentences, one more. */
+export const preparedText = {
+  title: 'Książka próbna',
+  heading: 'Jeden',
+  sentences: ['Żółw szedł powoli.', 'Mysz uciekła źrebięciu.'] as [string, string],
+  third: 'Trzecie zdanie tutaj.',
+  /** The same words as Whisper writes them: other case, other punctuation. */
+  heard: 'żółw szedł powoli mysz uciekła źrebięciu',
+}

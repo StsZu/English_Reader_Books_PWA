@@ -17,6 +17,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pl.json",
     "golden": "GOLDEN=1 vitest run tests/golden",
+    "prepared-book": "esbuild scripts/make-reader-book.ts --bundle --platform=node --format=esm --outfile=build/make-reader-book.mjs --log-level=warning --define:__TEST_MODE__=false --alias:#language=./src/languages/${APP_LANG:-en}.ts && node build/make-reader-book.mjs",
     "size": "node scripts/size.mjs",
     "check": "npm run build && node scripts/check-language.mjs && sh scripts/check-secrets.sh && node scripts/size.mjs && npm run build:pl && APP_LANG=pl node scripts/check-language.mjs && sh scripts/check-secrets.sh && node scripts/size.mjs"
   },

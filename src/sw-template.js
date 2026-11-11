@@ -1,6 +1,8 @@
 /* Service worker: precaches the app shell so the installed PWA starts offline. */
 const PRECACHE = __PRECACHE__
 const CACHE = 'shell-__VERSION__'
+/** Absolute URLs of the precached files of this version: the only requests matched without regard to `Vary`. */
+const SHELL = new Set(PRECACHE.map((path) => new URL(path, self.registration.scope).href))
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)))
@@ -34,5 +36,9 @@ self.addEventListener('fetch', (event) => {
     )
     return
   }
-  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)))
+  // The shell files of this build are the same whatever the request headers. A server may answer them with
+  // `Vary: Origin` (vite preview does): the cached copy, fetched by `cache.addAll` without `Origin`, would then not
+  // match a module script request, which carries `Origin`, and the app would not start offline.
+  const options = SHELL.has(url.href) ? { ignoreVary: true } : undefined
+  event.respondWith(caches.match(request, options).then((cached) => cached || fetch(request)))
 })
