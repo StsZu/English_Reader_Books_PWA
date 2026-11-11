@@ -92,8 +92,13 @@ export async function validatePackage(value: unknown, language: string = sourceL
     }
   }
 
-  const translations = pkg.translations && typeof pkg.translations === 'object' ? pkg.translations : {}
-  const sync = pkg.sync && typeof pkg.sync === 'object' ? pkg.sync : {}
+  // Both maps are required objects (an untimed paragraph simply has no key in `sync`); anything else is refused here,
+  // before any write (specs/015-reader-book-container, review 2026-11-11).
+  const isMap = (value: unknown) => !!value && typeof value === 'object' && !Array.isArray(value)
+  if (!isMap(pkg.translations)) problems.push('Немає перекладу (поле translations).')
+  if (!isMap(pkg.sync)) problems.push('Немає часу речень (поле sync); для книжки без часу воно порожнє: {}.')
+  const translations = isMap(pkg.translations) ? pkg.translations! : {}
+  const sync = isMap(pkg.sync) ? pkg.sync! : {}
   let missingTranslation = 0
   let badTranslation = 0
   let badSync = 0
@@ -122,9 +127,10 @@ export async function validatePackage(value: unknown, language: string = sourceL
   if (missingTranslation) problems.push(`Немає перекладу для абзаців: ${missingTranslation}.`)
   if (badTranslation) problems.push(`Переклад не відповідає реченням в абзацах: ${badTranslation}.`)
   if (badSync) problems.push(`Час речень пошкоджено в абзацах: ${badSync}.`)
+  // Every key, of both maps, is exactly "chapter-paragraph" of a paragraph that exists: no extra parts, no leading zeros.
   for (const key of [...Object.keys(translations), ...Object.keys(sync)]) {
-    const [c, p] = key.split('-').map(Number)
-    if (!book.chapters[c]?.paragraphs[p]) {
+    const match = /^(0|[1-9]\d*)-(0|[1-9]\d*)$/.exec(key)
+    if (!match || !book.chapters[Number(match[1])]?.paragraphs[Number(match[2])]) {
       problems.push(`Переклад або час для абзацу ${key}, якого немає в тексті.`)
       break
     }
