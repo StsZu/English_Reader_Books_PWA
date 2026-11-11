@@ -26,3 +26,13 @@ export const sampleCard: WordCard = {
   headword: 'woman', lemma: 'woman', ipa: 'ˈwʊmən', partOfSpeech: 'іменник', contextTranslation: 'жінка',
   otherTranslations: ['дружина', 'служниця'], note: '', level: 'A1', forms: 'woman — women', irregular: true,
 }
+
+/** Synthetic text of a prepared book (specs/013-prepared-book): a heading, a paragraph of two sentences, one more. */
+export const preparedText = {
+  title: 'Synthetic book',
+  heading: 'One',
+  sentences: ['The cat sat.', 'The mouse ran.'] as [string, string],
+  third: 'Third sentence here.',
+  /** The same words as Whisper writes them: other case, other punctuation. */
+  heard: 'the cat sat the mouse ran',
+}

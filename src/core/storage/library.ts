@@ -3,7 +3,7 @@ import { signal } from '@preact/signals'
 import { summarize, type Book, type BookSummary } from '../model/book.ts'
 import { sourceLanguage } from '../language.ts'
 import { fold } from '../util/fold.ts'
-import { DB_NAME, STORES, clearStore, getValue, setValue, storageErrorText, transact } from './db.ts'
+import { DB_NAME, STORES, clearStore, db, getValue, setValue, storageErrorText, transact } from './db.ts'
 import { resetAllSettings } from './settings.ts'
 import { clearAllAudio, deleteAudio } from '../audiobook/store.ts'
 
@@ -175,4 +175,20 @@ export async function resetAll(): Promise<void> {
     // Cache Storage may be unavailable outside a secure context.
   }
   resetAllSettings()
+}
+
+/**
+ * Removes cached translations of books that are not in the library: left by an import that stopped
+ * before the book was added (specs/013-prepared-book, D1). Called once at start, like removeOrphanAudio.
+ */
+export async function removeOrphanTranslations(bookIDs: string[]): Promise<void> {
+  const known = new Set(bookIDs)
+  const database = await db()
+  for (const store of ['translations', 'fragments'] as const) {
+    for (const key of await database.getAllKeys(store)) {
+      const text = String(key)
+      const bar = text.indexOf('|')
+      if (bar > 0 && !known.has(text.slice(0, bar))) await database.delete(store, key)
+    }
+  }
 }

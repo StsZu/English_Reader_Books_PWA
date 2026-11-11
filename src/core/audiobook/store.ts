@@ -2,6 +2,7 @@
 // A separate IndexedDB database, so the book database schema (db.ts) stays as it is.
 import { openDB, type IDBPDatabase } from 'idb'
 import { DB_NAME } from '../storage/db.ts'
+import type { StoredSync } from '../prepared/package.ts'
 
 export interface AudioTrack {
   id: string
@@ -20,12 +21,13 @@ export interface AudioPosition {
 }
 
 const AUDIO_DB = `${DB_NAME}-audio`
-const STORES = ['tracks', 'files', 'positions'] as const
+/** `sync` (version 2): time of the sentences of a prepared book (specs/013-prepared-book, M5). */
+const STORES = ['tracks', 'files', 'positions', 'sync'] as const
 
 let dbPromise: Promise<IDBPDatabase> | null = null
 
 function db(): Promise<IDBPDatabase> {
-  dbPromise ??= openDB(AUDIO_DB, 1, {
+  dbPromise ??= openDB(AUDIO_DB, 2, {
     upgrade(database) {
       for (const name of STORES) {
         if (!database.objectStoreNames.contains(name)) database.createObjectStore(name)
@@ -88,6 +90,32 @@ export async function addTracks(bookID: string, files: File[], current?: AudioTr
   }
 }
 
+/** Stores the files as the book's only tracks, in the given order (a prepared book). */
+export async function putTracksInOrder(bookID: string, files: File[]): Promise<AudioTrack[]> {
+  const database = await db()
+  const added: AudioTrack[] = []
+  try {
+    for (const file of files) {
+      const track: AudioTrack = { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, duration: null }
+      await putFile(database, track.id, file)
+      added.push(track)
+    }
+    await setTracks(bookID, added)
+    return added
+  } catch (error) {
+    for (const track of added) await database.delete('files', track.id).catch(() => {})
+    throw error
+  }
+}
+
+export async function loadSync(bookID: string): Promise<StoredSync | null> {
+  return ((await (await db()).get('sync', bookID)) as StoredSync | undefined) ?? null
+}
+
+export async function saveSync(bookID: string, sync: StoredSync): Promise<void> {
+  await (await db()).put('sync', sync, bookID)
+}
+
 interface StoredBytes {
   audioBytes: ArrayBuffer
   type: string
@@ -113,12 +141,13 @@ export async function deleteTrackFile(id: string): Promise<void> {
   await (await db()).delete('files', id)
 }
 
-/** Deletes every audio file of the book and its listening place. */
+/** Deletes every audio file of the book, its listening place and the time of its sentences. */
 export async function deleteAudio(bookID: string): Promise<void> {
   const database = await db()
   for (const track of await listTracks(bookID)) await database.delete('files', track.id)
   await database.delete('tracks', bookID)
   await database.delete('positions', bookID)
+  await database.delete('sync', bookID)
 }
 
 /**
@@ -134,8 +163,10 @@ export async function removeOrphanAudio(bookIDs: string[]): Promise<void> {
     if (books.has(bookID)) for (const track of await listTracks(bookID)) referenced.add(track.id)
     else await deleteAudio(bookID)
   }
-  for (const key of await database.getAllKeys('positions')) {
-    if (!books.has(String(key))) await database.delete('positions', key)
+  for (const store of ['positions', 'sync'] as const) {
+    for (const key of await database.getAllKeys(store)) {
+      if (!books.has(String(key))) await database.delete(store, key)
+    }
   }
   for (const key of await database.getAllKeys('files')) {
     if (!referenced.has(String(key))) await database.delete('files', key)

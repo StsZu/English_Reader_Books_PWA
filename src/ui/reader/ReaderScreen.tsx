@@ -72,7 +72,7 @@ function Reader({ model }: { model: ReaderModel }) {
   const bookLineHeight = lineHeight(fontName, fontSize) + spacing
   const active = model.activeSentence.value
   const wordCursor = model.wordCursor.value
-  const current = model.reading.current.value
+  const current = model.spokenSentence.value
   const selection = model.selection.value
   const showTranslation = settings.showTranslation.value
   const savedList = savedWords.value
@@ -217,10 +217,27 @@ function Reader({ model }: { model: ReaderModel }) {
     if (!currentParagraph) return
     if (currentParagraph.chapter !== model.chapter.value) {
       model.goToChapter(currentParagraph.chapter, currentParagraph.paragraph)
-    } else if (currentParagraph.paragraph !== model.topParagraph.value) {
+    } else if (currentParagraph.paragraph !== model.topParagraph.value && !model.audioSentence.peek()) {
       scrollToParagraph(currentParagraph.paragraph, true)
     }
   }, [currentParagraph?.chapter, currentParagraph?.paragraph])
+
+  // A prepared book: long paragraphs, so the heard sentence itself is kept on screen (specs/013-prepared-book).
+  const heard = model.audioSentence.value
+  useEffect(() => {
+    if (!heard || heard.paragraph.chapter !== model.chapter.value) return
+    const el = scroller.current
+    const target = paragraphElement(heard.paragraph.paragraph)?.querySelector<HTMLElement>(`[data-s="${heard.sentence}"]`)
+    if (!el || !target) return
+    const view = el.getBoundingClientRect()
+    const box = target.getBoundingClientRect()
+    if (box.top >= view.top && box.bottom <= view.bottom) return
+    const s = scroll.current
+    s.programmatic = true
+    s.user = false
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    settleLater()
+  }, [heard?.paragraph.chapter, heard?.paragraph.paragraph, heard?.sentence, chapterIndex])
 
   // Gestures on the text (G1–G7, X1).
   useEffect(() => {

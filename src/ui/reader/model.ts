@@ -1,6 +1,6 @@
 // Port of EnglishReader/Views/ReaderViewModel.swift without the Apple offline fallback (V-01).
 // State is held in signals so the reader view re-renders only what changed.
-import { batch, signal } from '@preact/signals'
+import { batch, computed, effect, signal, untracked } from '@preact/signals'
 import {
   aiErrorText, errorMessage, isAbort, isAIError, needsSettings, ReplayMissingError, type TranslationProvider,
 } from '../../contracts.ts'
@@ -15,6 +15,8 @@ import { SystemSpeechEngine } from '../../core/speech/system-speech.ts'
 import { currentVoiceEngine, pronounceWord, stopPronunciation } from '../../core/speech/engines.ts'
 import { ReadingController } from '../../core/speech/reading.ts'
 import { AudiobookPlayer, RATES } from '../../core/audiobook/player.ts'
+import { loadSync } from '../../core/audiobook/store.ts'
+import { buildSyncIndex, sentenceAt, type SyncIndex } from '../../core/prepared/package.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { isQuotaError, storageError, storageErrorText } from '../../core/storage/db.ts'
@@ -101,6 +103,17 @@ export class ReaderModel {
   /** Speech keys whose audio is ready for «Ще раз» (AI: saved file; system: spoken this session). */
   readonly replayable = signal<ReadonlySet<string>>(new Set())
   readonly ready = signal(false)
+  /** Time of the sentences in the audio of a prepared book (specs/013-prepared-book); null for other books. */
+  readonly sync = signal<SyncIndex | null>(null)
+  /** The sentence heard in the audiobook, while the player bar is shown and has started at least once. */
+  readonly audioSentence = computed<SentenceRef | null>(() => {
+    const index = this.sync.value
+    if (!index || !this.audioMode || this.audiobook.state.value === 'idle') return null
+    const track = this.audiobook.tracks.value[this.audiobook.track.value]
+    return track ? sentenceAt(index, track.id, this.audiobook.time.value) : null
+  })
+  /** The sentence being heard: read aloud by the voice, or in the audio of a prepared book. Highlighted and followed. */
+  readonly spokenSentence = computed<SentenceRef | null>(() => this.reading.current.value ?? this.audioSentence.value)
 
   private readonly store: TranslationStore
   private readonly provider: () => TranslationProvider
@@ -117,6 +130,7 @@ export class ReaderModel {
   private selectionAnchor: WordPosition | null = null
   private longPressInProgress = false
   private lastLongPressEnd = 0
+  private readonly stopFollowingAudio: () => void
 
   constructor(readonly book: Book, options: { provider?: () => TranslationProvider; sentenceSpeaker?: OpenAISpeechEngine } = {}) {
     this.store = new TranslationStore(book.id)
@@ -130,6 +144,15 @@ export class ReaderModel {
       this.stopSentenceSpeech()
       stopPronunciation()
     }
+    // A prepared book: each new sentence heard in the audio becomes the selected one, so its translation is shown
+    // without a tap. A sentence tapped meanwhile stays until the next one is heard (specs/013-prepared-book, D3a).
+    this.stopFollowingAudio = effect(() => {
+      const heard = this.audioSentence.value
+      if (!heard || !settings.showTranslation.value) return
+      untracked(() => {
+        if (!this.selection.value && !sameSentence(this.activeSentence.value, heard)) this.select(heard)
+      })
+    })
   }
 
   /** Restores the saved position and selects a sentence opened from the saved list. */
@@ -143,6 +166,7 @@ export class ReaderModel {
       this.ready.value = true
     })
     void this.audiobook.load()
+    void loadSync(this.book.id).then((sync) => { if (sync) this.sync.value = buildSyncIndex(sync) }).catch(() => {})
     const pending = pendingSentence
     if (pending && pending.bookID === this.book.id) {
       setPendingSentence(null)
@@ -807,6 +831,7 @@ export class ReaderModel {
 
   /** Stops every sound owned by the reader (leaving the reader). */
   dispose() {
+    this.stopFollowingAudio()
     this.savePosition()
     this.reading.stop()
     this.audiobook.dispose()
