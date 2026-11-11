@@ -15,7 +15,7 @@ done
 if [ -f dist/index.html ] && ! grep -q "Content-Security-Policy" dist/index.html; then
   echo "FAIL: у dist/index.html немає CSP"; status=1
 fi
-if [ -f dist/index.html ] && grep -rIlE "testTranslation|testSpeech|uiTest" dist/assets 2>/dev/null; then
+if [ -f dist/index.html ] && grep -rIlE "testTranslation|testSpeech|testImport|__resumeImport|uiTest" dist/assets 2>/dev/null; then
   echo "FAIL: тестові фікстури потрапили в production-збірку"; status=1
 fi
 if git ls-files --cached --others --exclude-standard | grep -E '(^|/)reference/|\.epub$|\.env' ; then

@@ -13,11 +13,14 @@ export interface TestFlags {
   /** OpenAI key injected only for live tests. */
   key: string | null
   installHint: boolean
+  /** Prepared import (specs/015, R021 e2e): stop after this phase until `__resumeImport()`, or fail after it. */
+  importPause: string | null
+  importFail: string | null
 }
 
 const none: TestFlags = {
   reset: false, translation: false, speech: false, wordCard: false, savedWords: false, recording: false,
-  voice: null, importPath: null, key: null, installHint: false,
+  voice: null, importPath: null, key: null, installHint: false, importPause: null, importFail: null,
 }
 
 function parse(): TestFlags {
@@ -35,6 +38,8 @@ function parse(): TestFlags {
     importPath: params.get('import'),
     key: params.get('key'),
     installHint: params.has('installHint'),
+    importPause: params.get('testImportPause'),
+    importFail: params.get('testImportFail'),
   }
 }
 

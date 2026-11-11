@@ -8,6 +8,7 @@ import { TranslationStore } from '../ai/translation.ts'
 import { addBook, deleteBook } from '../storage/library.ts'
 import { maxFileSize } from '../import/importer.ts'
 import { sha256File } from '../util/sha256.ts'
+import { testFlags } from '../../app/test-mode.ts'
 import { PACKAGE_SUFFIX, validatePackage, type ReaderPackage, type StoredSync } from './package.ts'
 
 export const isPackageFile = (file: { name: string }) => file.name.toLowerCase().endsWith(PACKAGE_SUFFIX)
@@ -57,7 +58,25 @@ async function checkSpace(bytes: number) {
 /** Tests: called after each phase is written, to stop an import in the middle (specs/015, R021). */
 export interface ImportHooks { afterPhase?(phase: string, bookId: string): Promise<void> }
 
-export async function importPrepared(files: File[], now = new Date(), hooks: ImportHooks = {}): Promise<PreparedImport> {
+interface ImportTestWindow { __importPhases?: string[]; __importPausedAt?: string; __resumeImport?: () => void }
+
+/** Test mode only (e2e of two real tabs): `?testImportPause=<phase>` holds the import, with its lock, after that
+ * phase until `__resumeImport()`; `?testImportFail=<phase>` fails it there. Production builds drop this. */
+function testHooks(): ImportHooks {
+  if (!__TEST_MODE__ || (!testFlags.importPause && !testFlags.importFail)) return {}
+  return {
+    async afterPhase(phase) {
+      const w = globalThis as unknown as ImportTestWindow
+      w.__importPhases = [...(w.__importPhases ?? []), phase]
+      if (phase === testFlags.importFail) throw new Error(`Книжку не імпортовано: тестовий збій після фази ${phase}.`)
+      if (phase === testFlags.importPause) {
+        await new Promise<void>((resolve) => { w.__resumeImport = resolve; w.__importPausedAt = phase })
+      }
+    },
+  }
+}
+
+export async function importPrepared(files: File[], now = new Date(), hooks: ImportHooks = testHooks()): Promise<PreparedImport> {
   const packages = files.filter(isPackageFile)
   if (packages.length !== 1) throw new Error('Виберіть один файл підготовленої книжки (.reader.json) разом з його аудіофайлами.')
   const pkg = await readPackage(packages[0])
