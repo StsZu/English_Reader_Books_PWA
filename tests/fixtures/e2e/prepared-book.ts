@@ -8,9 +8,9 @@ import { preparedText } from '../language.ts'
 import { zipArchive } from '../zip-writer.ts'
 import { CONTAINER_MIMETYPE } from '../../../src/core/prepared/container.ts'
 
-function wav(seconds: number): Buffer {
+function wav(seconds: number, fill = 0): Buffer {
   const samples = 8000 * seconds
-  const buffer = Buffer.alloc(44 + samples * 2)
+  const buffer = Buffer.alloc(44 + samples * 2, fill)
   buffer.write('RIFF', 0, 'ascii')
   buffer.writeUInt32LE(36 + samples * 2, 4)
   buffer.write('WAVEfmt ', 8, 'ascii')
@@ -34,8 +34,13 @@ const chapters: Chapter[] = [{
   ],
 }]
 
-export async function packageFiles() {
-  const audio = wav(30)
+/** Another book of the same shape (a control book in the library): its own title, translations and audio bytes. */
+export interface BookVariant { title?: string; translations?: Record<string, string[]>; fill?: number }
+
+const TRANSLATIONS = { '0-0': ['Перше речення.', 'Друге речення.'], '0-1': ['Третє речення.'] }
+
+export async function packageFiles(variant: BookVariant = {}) {
+  const audio = wav(30, variant.fill)
   const pkg: ReaderPackage = {
     format: PACKAGE_FORMAT,
     version: PACKAGE_VERSION,
@@ -43,8 +48,8 @@ export async function packageFiles() {
     edition: await editionHash(chapters),
     language: sourceLanguage,
     translationLanguage: 'uk',
-    book: { title: preparedText.title, author: 'Test', format: 'txt', chapters },
-    translations: { '0-0': ['Перше речення.', 'Друге речення.'], '0-1': ['Третє речення.'] },
+    book: { title: variant.title ?? preparedText.title, author: 'Test', format: 'txt', chapters },
+    translations: variant.translations ?? TRANSLATIONS,
     tracks: [{ id: 't1', name: 'synthetic.wav', size: audio.length, sha256: createHash('sha256').update(audio).digest('hex') }],
     // 0–3 s: an introduction without text; the second paragraph from 20 s.
     sync: { '0-0': [['t1', 3, 10], ['t1', 10.2, 18]], '0-1': [['t1', 20, 28]] },
@@ -56,8 +61,8 @@ export async function packageFiles() {
 }
 
 /** The same package and audio in one `.polenuk` (specs/015-reader-book-container, R023); `language` overrides the package's. */
-export async function polenuk(language?: string, source?: unknown) {
-  const [pkgFile, audioFile] = await packageFiles()
+export async function polenuk(language?: string, source?: unknown, variant: BookVariant = {}) {
+  const [pkgFile, audioFile] = await packageFiles(variant)
   const pkg = JSON.parse(pkgFile.buffer.toString())
   if (language) pkg.language = language
   if (source) pkg.source = source
