@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { databaseName, sourceLanguage } from '../../src/core/language.ts'
 import { demoBook, preparedText } from '../fixtures/language.ts'
 import { packageFiles, polenuk } from '../fixtures/e2e/prepared-book.ts'
+import { zipArchive } from '../fixtures/zip-writer.ts'
 
 const sentence = (page: Page, paragraph: number, s: number) => page.locator(`[data-p="${paragraph}"] .s[data-s="${s}"]`)
 
@@ -45,6 +46,45 @@ test('підготовлена книжка без аудіофайла не і�
   const [pkg] = await packageFiles()
   await page.getByTestId('importPreparedInput').setInputFiles([pkg])
   await expect(page.getByText(/Виберіть разом з нею аудіофайли: synthetic\.wav/)).toBeVisible()
+})
+
+/** Keys of every store of the app's three databases: what an import refused before writing must leave as it was. */
+const keys = (page: Page) => page.evaluate(async (name) => {
+  const ask = <T>(r: IDBRequest<T>) => new Promise<T>((ok, no) => { r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) })
+  const out: Record<string, string[]> = {}
+  for (const db of [name, `${name}-audio`, `${name}-sync`]) {
+    const d = await ask(indexedDB.open(db))
+    for (const store of [...d.objectStoreNames]) out[`${db}/${store}`] = (await ask(d.transaction(store).objectStore(store).getAllKeys())).map(String)
+    d.close()
+  }
+  return out
+}, databaseName)
+
+test('вибір підготовленої книжки без фільтра (R034): будь-який файл можна вибрати; чужий або пошкоджений — відмова без запису; .polenuk імпортується', async ({ page }) => {
+  await page.goto('./?reset')
+  await expect(page.locator('[data-testid^="book-"]').first()).toBeVisible()
+  const prepared = page.getByTestId('importPreparedInput')
+  expect(await prepared.getAttribute('accept')).toBeNull()                 // iPad Safari greyed .polenuk in a mixed list
+  expect(await prepared.getAttribute('multiple')).not.toBeNull()          // .reader.json with its audio stays possible
+  expect(await page.getByTestId('importInput').getAttribute('accept'))    // the ordinary import is as it was
+    .toBe('.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown')
+  const before = await keys(page)
+  const refused = async (file: { name: string; mimeType: string; buffer: Buffer }, message: RegExp) => {
+    await prepared.setInputFiles([file])
+    await expect(page.getByTestId('importError')).toContainText(message)
+    await page.getByTestId('importErrorOK').click()
+    expect(await keys(page)).toEqual(before)
+  }
+  const bytes = (n: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 37) % 256))
+  await refused({ name: 'notes.pdf', mimeType: 'application/pdf', buffer: bytes(500) }, /виберіть файл книжки \.polenuk \(або \.zip\) чи файл \.reader\.json/)
+  await refused({ name: 'book.epub', mimeType: 'application/epub+zip', buffer: bytes(500) }, /виберіть файл книжки \.polenuk/)
+  await refused({ name: 'broken.polenuk', mimeType: '', buffer: bytes(2000) }, /Книжку не імпортовано/)
+  await refused({ name: 'other.zip', mimeType: 'application/zip', buffer: Buffer.from(zipArchive([['a.txt', 'text', true]])) }, /Книжку не імпортовано/)
+
+  await prepared.setInputFiles([await polenuk()])
+  await expect(page.getByTestId('readerScroll')).toBeVisible()
+  await page.goto('./')
+  await expect(page.getByTestId(`book-${preparedText.title}`)).toBeVisible()
 })
 
 /** Version and stores of a database of this origin, opened without a version (does not upgrade it). */

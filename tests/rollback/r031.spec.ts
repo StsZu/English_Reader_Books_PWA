@@ -149,9 +149,10 @@ async function open(page: Page, which: 'new' | 'old') {
   folder = join(ROOT, `${which}-${LANG}`)
   await page.goto(`http://127.0.0.1:${PORT}/`)
   await expect(page.locator('[data-testid^="book-"]').first()).toBeVisible()
-  // Which version is on screen: only the new one accepts a `.polenuk`.
+  // Which version is on screen: the old one filters the picker without `.polenuk`; the new one has no filter (R034).
   const accept = await page.getByTestId('importPreparedInput').getAttribute('accept')
-  expect(accept?.includes('.polenuk'), `the ${which} version is served`).toBe(which === 'new')
+  if (which === 'new') expect(accept, 'the new version is served').toBeNull()
+  else expect(accept?.includes('.json') && !accept.includes('.polenuk'), 'the old version is served').toBe(true)
 }
 
 /** In the old UI: the reading place, the listening time and the speed are restored; then (at 1×) the stored audio

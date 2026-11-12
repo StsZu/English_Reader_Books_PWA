@@ -10,7 +10,6 @@ import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { settings } from '../../core/storage/settings.ts'
 import { importFile } from '../../core/import/importer.ts'
 import { importPreparedSelection } from '../../core/prepared/import.ts'
-import { AUDIO_ACCEPT } from '../../core/audiobook/store.ts'
 import type { SkippedContent } from '../../core/import/epub.ts'
 import { placeParagraph, placeSentence, setPendingSentence, type SavedPlace } from '../../core/saved/saved.ts'
 import { formatLabel, type BookSummary } from '../../core/model/book.ts'
@@ -23,8 +22,6 @@ import { SavedList } from '../saved/SavedList.tsx'
 import './library.css'
 
 const ACCEPT = '.epub,.txt,.text,.md,.markdown,application/epub+zip,text/plain,text/markdown'
-/** A prepared book (specs/013-prepared-book): `.reader.json` chosen together with its audio files. */
-const PREPARED_ACCEPT = `.polenuk,.zip,application/zip,.json,application/json,${AUDIO_ACCEPT}`
 
 export function LibraryScreen() {
   const [importing, setImporting] = useState(false)
@@ -116,7 +113,9 @@ export function LibraryScreen() {
         <NoticeBar text="Доступна нова версія." actionTitle="Оновити" onAction={pendingUpdate.value} testID="updateBar" />
       )}
       <input ref={input} type="file" accept={ACCEPT} class="library-input" data-testid="importInput" onChange={onFile} />
-      <input ref={preparedInput} type="file" accept={PREPARED_ACCEPT} multiple class="library-input" data-testid="importPreparedInput" onChange={onPrepared} />
+      {/* A prepared book: one `.polenuk` (or `.zip`), or `.reader.json` with its audio. No `accept` filter (R034): iPad
+          Safari greyed out `.polenuk` among the known types of a mixed list; the content is checked on import. */}
+      <input ref={preparedInput} type="file" multiple class="library-input" data-testid="importPreparedInput" onChange={onPrepared} />
       <main class="library-scroll">
         {list.length === 0 && (
           <div class="library-empty">

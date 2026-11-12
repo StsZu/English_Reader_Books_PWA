@@ -173,6 +173,10 @@ export async function importContainer(file: File, now = new Date()): Promise<Pre
 /** The prepared-book button: one container, or a package with its audio files. */
 export async function importPreparedSelection(files: File[], now = new Date()): Promise<PreparedImport> {
   if (files.length === 1 && isContainerFile(files[0])) return importContainer(files[0], now)
+  // Any file can be chosen (the picker has no filter, R034): the formats are named when none of them is there.
+  if (!files.some(isContainerFile) && !files.some(isPackageFile)) {
+    throw new Error('Книжку не імпортовано: виберіть файл книжки .polenuk (або .zip) чи файл .reader.json разом з його аудіофайлами.')
+  }
   if (files.some(isContainerFile)) throw new Error('Виберіть або один файл .polenuk, або файл .reader.json разом з аудіофайлами.')
   return importPrepared(files, now)
 }
