@@ -231,6 +231,46 @@ export async function readBackup(file: Blob, limit = maxBackupSize): Promise<Bac
 export const backupBookIDs = (backup: Backup): string[] =>
   backup.records.filter((r) => r.store === 'books').map((r) => r.key)
 
+export interface DataCounts {
+  books: number
+  words: number
+  quotes: number
+}
+
+/** What a restore of `backup` does on this device (specs/006-backup, stage 1). */
+export interface RestorePreview {
+  device: DataCounts
+  /** The device has more books, words or quotes than the backup. */
+  deviceHasMore: boolean
+  /** Books with audio here that are not in the backup: their audio is removed at the next start. */
+  audioRemoved: number
+  /** Prepared books with sentence time here that are not in the backup: the time is removed too. */
+  timeRemoved: number
+  /** Prepared books in the backup whose audio and time stay only because they are on this device. */
+  timeKept: number
+}
+
+/** Counts of the main database of this device, read as the backup counts them. */
+export async function deviceCounts(): Promise<DataCounts> {
+  const database = await db()
+  const index = ((await database.get('meta', 'library')) ?? []) as unknown[]
+  const saved = (await database.get('meta', 'saved')) as { words?: unknown[]; quotes?: unknown[] } | undefined
+  return { books: index.length, words: saved?.words?.length ?? 0, quotes: saved?.quotes?.length ?? 0 }
+}
+
+/** `audioIDs`, `timedIDs`: books with audio and with sentence time on this device (audio and sync databases). */
+export async function restorePreview(backup: Backup, audioIDs: string[], timedIDs: string[]): Promise<RestorePreview> {
+  const device = await deviceCounts()
+  const kept = new Set(backupBookIDs(backup))
+  return {
+    device,
+    deviceHasMore: device.books > backup.books || device.words > backup.words || device.quotes > backup.quotes,
+    audioRemoved: audioIDs.filter((id) => !kept.has(id)).length,
+    timeRemoved: timedIDs.filter((id) => !kept.has(id)).length,
+    timeKept: timedIDs.filter((id) => kept.has(id)).length,
+  }
+}
+
 // MARK: - Restore
 
 /**

@@ -8,9 +8,10 @@ import { deleteKey, hasStoredKey, saveKey } from '../../core/storage/key.ts'
 import { isPersisted, requestPersistence } from '../../core/storage/db.ts'
 import { settings, settingDefaults } from '../../core/storage/settings.ts'
 import {
-  backupBookIDs, backupFileName, createBackup, lastBackupDate, readBackup, restoreBackup, setLastBackupDate, type Backup,
+  backupFileName, createBackup, lastBackupDate, readBackup, restoreBackup, restorePreview, setLastBackupDate, type Backup,
+  type RestorePreview,
 } from '../../core/storage/backup.ts'
-import { audioBookIDs } from '../../core/audiobook/store.ts'
+import { audioBookIDs, syncBookIDs } from '../../core/audiobook/store.ts'
 import { OpenAITranslationProvider } from '../../core/ai/translation.ts'
 import { errorMessage } from '../../contracts.ts'
 import { formatBytes, formatDate } from '../../core/util/format.ts'
@@ -25,6 +26,30 @@ function relaunch() {
   location.replace(url.href)
 }
 
+interface PendingRestore {
+  backup: Backup
+  preview: RestorePreview
+  /** The current data were saved from this dialog. */
+  savedFirst: boolean
+}
+
+/** Stage 1 of specs/006-backup: the device and the backup side by side, and what the copy does not keep. */
+function RestoreMessage({ backup, preview, savedFirst }: PendingRestore) {
+  const { device } = preview
+  const lines = [
+    `На цьому пристрої: книжок ${device.books}, слів ${device.words}, цитат ${device.quotes}.`,
+    `Копія від ${formatDate(new Date(backup.created))}: книжок ${backup.books}, слів ${backup.words}, цитат ${backup.quotes}.`,
+    preview.deviceHasMore ? 'На цьому пристрої більше книжок, слів або цитат, ніж у копії.' : '',
+    'Книжки, слова, цитати й налаштування на цьому пристрої буде замінено даними копії; те, чого немає в копії, буде втрачено. Ключ OpenAI не змінюється.',
+    preview.audioRemoved > 0 ? `Аудіо книжок, яких немає в копії, буде видалено: ${preview.audioRemoved}.` : '',
+    preview.timeRemoved > 0 ? `Час речень підготовлених книжок, яких немає в копії, буде видалено: ${preview.timeRemoved}.` : '',
+    preview.timeKept > 0 ? `Аудіо й час речень підготовлених книжок, що є в копії, лишаються лише на цьому пристрої: ${preview.timeKept}.` : '',
+    'Аудіо й час речень підготовлених книжок у копію не входять: на іншому пристрої такі книжки відновляться лише текстом з перекладом.',
+    savedFirst ? 'Копію поточних даних збережено.' : '',
+  ].filter(Boolean)
+  return <>{lines.map((line, i) => <p key={i} class="dialog-paragraph" data-testid={i === 0 ? 'restoreDevice' : undefined}>{line}</p>)}</>
+}
+
 export function AIServices({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [keyInput, setKeyInput] = useState('')
   const [checking, setChecking] = useState(false)
@@ -33,7 +58,9 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
   const [backupBusy, setBackupBusy] = useState<'save' | 'restore' | null>(null)
   const [lastBackup, setLastBackup] = useState(lastBackupDate)
   const [prepared, setPrepared] = useState<ExportFile<Blob> | null>(null)
-  const [pending, setPending] = useState<{ backup: Backup; orphanAudio: number } | null>(null)
+  const [pending, setPending] = useState<PendingRestore | null>(null)
+  /** The restore waiting while the current data are saved first; its dialog comes back after that. */
+  const [held, setHeld] = useState<PendingRestore | null>(null)
   const [backupAlert, setBackupAlert] = useState<{ title: string; message: string } | null>(null)
   const restoreInput = useRef<HTMLInputElement>(null)
 
@@ -72,6 +99,7 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
       const now = new Date()
       setPrepared({ name: backupFileName(now), type: 'application/gzip', contents: await createBackup(now) })
     } catch (error) {
+      setHeld(null)
       setBackupAlert({ title: 'Не вдалося зберегти копію', message: errorMessage(error) })
     } finally {
       setBackupBusy(null)
@@ -83,6 +111,12 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
     const date = new Date()
     setLastBackupDate(date)
     setLastBackup(date)
+    setPending((p) => p && { ...p, savedFirst: true })
+  }
+
+  function saveFirst(restore: PendingRestore) {
+    setHeld(restore)
+    void prepareBackup()
   }
 
   async function chooseBackup(event: JSX.TargetedEvent<HTMLInputElement>) {
@@ -93,9 +127,8 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
     setBackupBusy('restore')
     try {
       const backup = await readBackup(file)
-      const kept = new Set(backupBookIDs(backup))
-      const orphanAudio = (await audioBookIDs().catch(() => [])).filter((id) => !kept.has(id)).length
-      setPending({ backup, orphanAudio })
+      const preview = await restorePreview(backup, await audioBookIDs().catch(() => []), await syncBookIDs().catch(() => []))
+      setPending({ backup, preview, savedFirst: false })
     } catch (error) {
       setBackupAlert({ title: 'Відновлення з копії', message: errorMessage(error) })
     } finally {
@@ -204,23 +237,28 @@ export function AIServices({ open, onClose }: { open: boolean; onClose: () => vo
       <ConfirmDialog
         open={prepared !== null}
         title="Копію підготовлено"
-        message={prepared && `«${prepared.name}», ${formatBytes(prepared.contents.size)}. Ключа OpenAI й аудіокниг у копії немає.`}
+        message={prepared && `«${prepared.name}», ${formatBytes(prepared.contents.size)}. Ключа OpenAI, аудіо й часу речень підготовлених книжок у копії немає.`}
         actions={[
           { label: 'Зберегти', role: 'default', testID: 'backupShare', onSelect: () => { if (prepared) void saveBackup(prepared) } },
           { label: 'Скасувати', role: 'cancel' },
         ]}
-        onClose={() => setPrepared(null)}
+        onClose={() => {
+          setPrepared(null)
+          if (held) {
+            setPending(held)
+            setHeld(null)
+          }
+        }}
         testID="backupPrepared"
       />
       <ConfirmDialog
         open={pending !== null}
         title="Відновити з копії?"
-        message={pending && [
-          `Копія від ${formatDate(new Date(pending.backup.created))}: книжок ${pending.backup.books}, слів ${pending.backup.words}, цитат ${pending.backup.quotes}.`,
-          'Книжки, слова, цитати й налаштування на цьому пристрої буде замінено даними копії. Ключ OpenAI і аудіокниги не змінюються.',
-          pending.orphanAudio > 0 ? `Аудіо книжок, яких немає в копії, буде видалено: ${pending.orphanAudio}.` : '',
-        ].filter(Boolean).join(' ')}
+        message={pending && <RestoreMessage {...pending} />}
         actions={[
+          ...(pending && !pending.savedFirst
+            ? [{ label: 'Спершу зберегти поточні дані', role: 'default' as const, testID: 'restoreSaveFirst', onSelect: () => saveFirst(pending) }]
+            : []),
           { label: 'Замінити', role: 'destructive', testID: 'restoreConfirm', onSelect: () => { if (pending) void restore(pending.backup) } },
           { label: 'Скасувати', role: 'cancel', testID: 'restoreCancel' },
         ]}

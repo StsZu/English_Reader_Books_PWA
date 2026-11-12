@@ -231,6 +231,11 @@ export async function loadSync(bookID: string): Promise<StoredSync | null> {
   return ((await (await syncDB()).get('sync', bookID)) as StoredSync | undefined) ?? null
 }
 
+/** Books whose sentence time (a prepared book) is on this device. */
+export async function syncBookIDs(): Promise<string[]> {
+  return (await (await syncDB()).getAllKeys('sync')).map(String)
+}
+
 export async function saveSync(bookID: string, sync: StoredSync): Promise<void> {
   await (await syncDB()).put('sync', sync, bookID)
 }

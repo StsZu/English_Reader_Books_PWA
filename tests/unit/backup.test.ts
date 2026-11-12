@@ -9,8 +9,11 @@ import { savePosition } from '../../src/core/storage/positions.ts'
 import { deleteKey, initKey, openAIKey, saveKey } from '../../src/core/storage/key.ts'
 import { settings } from '../../src/core/storage/settings.ts'
 import {
-  BACKUP_VERSION, backupErrors, backupFileName, createBackup, lastBackupKey, readBackup, restoreBackup,
+  BACKUP_VERSION, backupBookIDs, backupErrors, backupFileName, createBackup, lastBackupKey, readBackup, restoreBackup, restorePreview,
 } from '../../src/core/storage/backup.ts'
+import {
+  addTracks, audioBookIDs, listTracks, loadSync, removeOrphanAudio, saveSync, syncBookIDs,
+} from '../../src/core/audiobook/store.ts'
 import { sampleCard } from '../fixtures/language.ts'
 
 const book = (title: string): Book => ({
@@ -227,5 +230,70 @@ describe('відновлення', () => {
     await closeDB()
     await initLibrary()
     expect(books.value.map((b) => b.id)).toEqual([other.id])
+  })
+})
+
+// Stage 1 (2026-11-12): the restore dialog compares the device with the backup. The backup keeps neither the audio
+// nor the sentence time of a prepared book; on the same device they stay with the books that are in the backup.
+describe('етап 1: порівняння перед відновленням і підготовлені книжки', () => {
+  const mp3 = (name: string) => new File([new Uint8Array([0xff, 0xfb, 0x90, 0x44, 1, 2, 3])], name, { type: 'audio/mpeg' })
+  const sync = { '0-0': [['track-x', 1, 2], ['track-x', 2, 3]] } as Parameters<typeof saveSync>[1]
+
+  beforeEach(async () => {
+    await removeOrphanAudio([])
+  })
+
+  it('однакові дані: без попереджень про втрату й аудіо', async () => {
+    await fillDevice()
+    const backup = await readBackup(await createBackup())
+    expect(await restorePreview(backup, await audioBookIDs(), await syncBookIDs())).toEqual({
+      device: { books: 1, words: 1, quotes: 1 }, deviceHasMore: false, audioRemoved: 0, timeRemoved: 0, timeKept: 0,
+    })
+  })
+
+  it('підготовлена книжка з копії зберігає аудіо й час на тому самому пристрої; книжка, якої немає в копії, їх втрачає', async () => {
+    const kept = await fillDevice()
+    await addTracks(kept, [mp3('kept.mp3')])
+    await saveSync(kept, sync)
+    const file = await createBackup()
+    const text = await gunzip(file)
+    expect(text).not.toContain('kept.mp3')
+    expect(text).not.toContain('track-x')
+    expect(text).not.toContain('sk-device-secret')
+
+    const later = (await addBook(book('Later'))).id
+    await addTracks(later, [mp3('later.mp3')])
+    await saveSync(later, sync)
+
+    const backup = await readBackup(file)
+    expect(await restorePreview(backup, await audioBookIDs(), await syncBookIDs())).toEqual({
+      device: { books: 2, words: 1, quotes: 1 }, deviceHasMore: true, audioRemoved: 1, timeRemoved: 1, timeKept: 1,
+    })
+
+    await restoreBackup(backup)
+    // What the next start does (coordination.ts).
+    await removeOrphanAudio(backupBookIDs(backup))
+    expect((await listTracks(kept)).map((t) => t.name)).toEqual(['kept.mp3'])
+    expect(await loadSync(kept)).toEqual(sync)
+    expect(await listTracks(later)).toEqual([])
+    expect(await loadSync(later)).toBeNull()
+  })
+
+  it('порожній пристрій (як інший iPad): копія з підготовленою книжкою не приносить ні аудіо, ні часу', async () => {
+    const id = await fillDevice()
+    await addTracks(id, [mp3('kept.mp3')])
+    await saveSync(id, sync)
+    const file = await createBackup()
+    await resetAll()
+    await removeOrphanAudio([])
+
+    const backup = await readBackup(file)
+    expect(await restorePreview(backup, await audioBookIDs(), await syncBookIDs())).toEqual({
+      device: { books: 0, words: 0, quotes: 0 }, deviceHasMore: false, audioRemoved: 0, timeRemoved: 0, timeKept: 0,
+    })
+    await restoreBackup(backup)
+    expect(await getValue('books', id)).toBeTruthy()
+    expect(await listTracks(id)).toEqual([])
+    expect(await loadSync(id)).toBeNull()
   })
 })

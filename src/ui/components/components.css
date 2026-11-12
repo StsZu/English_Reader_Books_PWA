@@ -855,6 +855,20 @@
   line-height: 1.35;
 }
 
+/* A message of several paragraphs (restore from a backup) scrolls instead of pushing the actions off screen. */
+.dialog-message:has(.dialog-paragraph) {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.dialog-paragraph {
+  margin: 0;
+}
+
+.dialog-paragraph + .dialog-paragraph {
+  margin-top: 6px;
+}
+
 .dialog-actions {
   display: flex;
   flex-direction: column;

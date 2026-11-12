@@ -78,7 +78,9 @@ test('копія → скидання → відновлення: місце ч�
   await page.getByTestId('restoreInput').setInputFiles(path)
   const summary = page.getByTestId('restoreSummary')
   await expect(summary).toContainText('книжок 1, слів 1, цитат 1')
-  await expect(summary).toContainText('Ключ OpenAI і аудіокниги не змінюються.')
+  await expect(page.getByTestId('restoreDevice')).toHaveText('На цьому пристрої: книжок 1, слів 0, цитат 0.')
+  await expect(summary).toContainText('Ключ OpenAI не змінюється.')
+  await expect(summary).toContainText('Аудіо й час речень підготовлених книжок у копію не входять')
   await page.getByTestId('restoreConfirm').click()
   await page.waitForURL((url) => !url.searchParams.has('reset'))
 
@@ -112,6 +114,16 @@ test('файл, що не є копією, і скасування не змін
   await file.saveAs(path)
   await page.getByTestId('restoreInput').setInputFiles(path)
   await expect(page.getByTestId('restoreSummary')).toContainText('книжок 1, слів 0, цитат 0')
+  await expect(page.getByTestId('restoreDevice')).toHaveText('На цьому пристрої: книжок 1, слів 0, цитат 0.')
+
+  // Stage 1: save the current data first, then the same dialog comes back.
+  await page.getByTestId('restoreSaveFirst').click()
+  await expect(page.getByTestId('backupPrepared')).toContainText('Ключа OpenAI, аудіо й часу речень підготовлених книжок у копії немає.')
+  const first = page.waitForEvent('download')
+  await page.getByTestId('backupShare').click()
+  expect((await first).suggestedFilename()).toMatch(/\.json\.gz$/)
+  await expect(page.getByTestId('restoreSummary')).toContainText('Копію поточних даних збережено.')
+  await expect(page.getByTestId('restoreSaveFirst')).toHaveCount(0)
   await page.getByTestId('restoreCancel').click()
   await expect(page.getByTestId('restoreSummary')).toBeHidden()
   await expect(page.getByTestId('aiServices')).toBeVisible()
