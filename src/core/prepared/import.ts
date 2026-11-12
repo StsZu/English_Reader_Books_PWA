@@ -56,7 +56,11 @@ async function checkSpace(bytes: number) {
 }
 
 /** Tests: called after each phase is written, to stop an import in the middle (specs/015, R021). */
-export interface ImportHooks { afterPhase?(phase: string, bookId: string): Promise<void> }
+export interface ImportHooks {
+  afterPhase?(phase: string, bookId: string): Promise<void>
+  /** After each track is stored and read back (index from 0). */
+  afterTrack?(index: number): Promise<void>
+}
 
 interface ImportTestWindow { __importPhases?: string[]; __importPausedAt?: string; __resumeImport?: () => void }
 
@@ -65,6 +69,9 @@ interface ImportTestWindow { __importPhases?: string[]; __importPausedAt?: strin
 function testHooks(): ImportHooks {
   if (!__TEST_MODE__ || (!testFlags.importPause && !testFlags.importFail)) return {}
   return {
+    async afterTrack(index) {
+      if (testFlags.importFail === `track-${index + 1}`) throw new Error(`Книжку не імпортовано: тестовий збій після доріжки ${index + 1}.`)
+    },
     async afterPhase(phase) {
       const w = globalThis as unknown as ImportTestWindow
       w.__importPhases = [...(w.__importPhases ?? []), phase]
@@ -76,7 +83,8 @@ function testHooks(): ImportHooks {
   }
 }
 
-export async function importPrepared(files: File[], now = new Date(), hooks: ImportHooks = testHooks()): Promise<PreparedImport> {
+export async function importPrepared(files: File[], now = new Date(), hooks: ImportHooks = testHooks(),
+  options: { copyAudio?: boolean } = {}): Promise<PreparedImport> {
   const packages = files.filter(isPackageFile)
   if (packages.length !== 1) throw new Error('Виберіть один файл підготовленої книжки (.reader.json) разом з його аудіофайлами.')
   const pkg = await readPackage(packages[0])
@@ -93,17 +101,19 @@ export async function importPrepared(files: File[], now = new Date(), hooks: Imp
     ...(pkg.book.contents ? { contents: pkg.book.contents } : {}),
     ...(sourceOf((pkg as { source?: unknown }).source)),
   }
-  return withImportLock(() => writePrepared(pkg, audio, book, hooks))
+  return withImportLock(() => writePrepared(pkg, audio, book, hooks, options.copyAudio ?? false))
 }
 
-async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hooks: ImportHooks): Promise<PreparedImport> {
+async function writePrepared(pkg: ReaderPackage, audio: File[], book: Book, hooks: ImportHooks, copy: boolean): Promise<PreparedImport> {
   const phase = async (name: string) => {
     await journalPut({ bookId: book.id, phase: name, startedAt: book.importedAt })
     await hooks.afterPhase?.(name, book.id)
   }
   try {
     await phase('checked')
-    const tracks = await putTracksInOrder(book.id, audio)
+    // Each stored track is read back and checked (size, SHA-256) before the book appears (R033).
+    const tracks = await putTracksInOrder(book.id, audio, {
+      copy, expected: pkg.tracks.map((t) => ({ size: t.size, sha256: t.sha256 })), afterTrack: hooks.afterTrack })
     await phase('tracks')
     const ids = new Map(pkg.tracks.map((track, i) => [track.id, tracks[i].id]))
     const sync: StoredSync = {}
@@ -156,7 +166,8 @@ export async function importContainer(file: File, now = new Date()): Promise<Pre
   const pkg = new File([JSON.stringify(opened.package)], 'book.reader.json', { type: 'application/json' })
   // Slices of the chosen file: no MP3 is copied into memory here; importPrepared hashes and stores them in pieces.
   const audio = opened.audio.map((a) => new File([file.slice(a.dataStart, a.dataStart + a.size)], a.name, { type: 'audio/mpeg' }))
-  return importPrepared([pkg, ...audio], now)
+  // Own copies of the slices (R033): WebKit stored the whole chosen file for a Blob made of a slice of it.
+  return importPrepared([pkg, ...audio], now, undefined, { copyAudio: true })
 }
 
 /** The prepared-book button: one container, or a package with its audio files. */

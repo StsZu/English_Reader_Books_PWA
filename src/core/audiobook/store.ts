@@ -3,6 +3,7 @@
 import { openDB, type IDBPDatabase } from 'idb'
 import { DB_NAME } from '../storage/db.ts'
 import type { StoredSync } from '../prepared/package.ts'
+import { sha256File } from '../util/sha256.ts'
 
 export interface AudioTrack {
   id: string
@@ -130,8 +131,8 @@ export async function addTracks(bookID: string, files: File[], current?: AudioTr
   try {
     for (const file of audio) {
       const track: AudioTrack = { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, duration: null }
+      added.push(track)                                    // before the write: a failure after it removes this one too
       await putFile(database, track.id, file)
-      added.push(track)
     }
     const tracks = [...(current ?? await listTracks(bookID)), ...added]
     await setTracks(bookID, tracks)
@@ -143,15 +144,58 @@ export async function addTracks(bookID: string, files: File[], current?: AudioTr
   }
 }
 
+/** Bytes per piece of the own copy of a track (R033). */
+export const COPY_CHUNK = 4 * 1024 * 1024
+
+/**
+ * An own copy of a file that is a slice of a bigger one (a track of a `.polenuk`), made of pieces of COPY_CHUNK bytes
+ * (specs/015-reader-book-container, R033): WebKit stored the whole chosen file in IndexedDB for a Blob made of a slice
+ * of it. Each piece's ArrayBuffer is handed to its own Blob and not kept here; the browser keeps the Blob data, so the
+ * page may still hold the whole track until it is stored — peak memory is not measured here (SC-02 on iPad).
+ */
+export async function ownCopy(file: File, chunk = COPY_CHUNK): Promise<File> {
+  const parts: Blob[] = []
+  for (let offset = 0; offset < file.size; offset += chunk) {
+    parts.push(new Blob([await file.slice(offset, offset + chunk).arrayBuffer()]))
+  }
+  return new File(parts, file.name, { type: file.type })
+}
+
+export interface StoreTracksOptions {
+  /** Store an own copy of each file (R033): for slices of a container. */
+  copy?: boolean
+  /** Size and SHA-256 each stored file must have when read back, in the order of the files. */
+  expected?: { size: number; sha256: string }[]
+  /** Tests: after each track is stored and checked (index from 0). */
+  afterTrack?(index: number): Promise<void>
+  /** Tests: after a track is written and before it is read back. */
+  afterWrite?(id: string): Promise<void>
+}
+
+/** The stored file read back: first its size, then its SHA-256 in pieces; a mismatch refuses the import. */
+async function checkStored(id: string, name: string, expected: { size: number; sha256: string }) {
+  const stored = await trackFile(id)
+  if (!stored || stored.size !== expected.size || await sha256File(stored) !== expected.sha256) {
+    throw new Error(`Книжку не імпортовано: збережене аудіо «${name}» не збігається з файлом книжки (розмір або SHA-256).`)
+  }
+}
+
 /** Stores the files as the book's only tracks, in the given order (a prepared book). */
-export async function putTracksInOrder(bookID: string, files: File[]): Promise<AudioTrack[]> {
+export async function putTracksInOrder(bookID: string, files: File[], options: StoreTracksOptions = {}): Promise<AudioTrack[]> {
   const database = await db()
   const added: AudioTrack[] = []
+  // Copies are made only where a Blob is kept; otherwise the fallback limit is checked before anything is copied.
+  const blobs = options.copy ? await canStoreBlobs(database) : true
   try {
-    for (const file of files) {
+    for (const [i, file] of files.entries()) {
       const track: AudioTrack = { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, duration: null }
-      await putFile(database, track.id, file)
-      added.push(track)
+      added.push(track)                                    // before the write: a failure after it removes this one too
+      if (!options.copy) await putFile(database, track.id, file)
+      else if (blobs) await putFile(database, track.id, await ownCopy(file))
+      else await putBytes(database, track.id, file)
+      await options.afterWrite?.(track.id)
+      if (options.expected?.[i]) await checkStored(track.id, file.name, options.expected[i])
+      await options.afterTrack?.(i)
     }
     await setTracks(bookID, added)
     return added
@@ -212,11 +256,36 @@ export async function putFile(database: Pick<IDBPDatabase, 'put'>, id: string, f
     await database.put('files', file, id)
   } catch (error) {
     if ((error as { name?: string })?.name === 'QuotaExceededError') throw error
-    if (file.size > MAX_FALLBACK_BYTES) {
-      throw new AudioStoreError(`Цей браузер не зберігає аудіо як файл (можливо, приватний перегляд), а доріжка ${file.name} `
-        + `завелика для збереження через пам'ять (${Math.round(file.size / 1048576)} МБ, межа ${MAX_FALLBACK_BYTES / 1048576} МБ).`)
-    }
-    await database.put('files', { audioBytes: await file.arrayBuffer(), type: file.type } satisfies StoredBytes, id)
+    await putBytes(database, id, file)
+  }
+}
+
+const tooBigForBytes = (file: File) => new AudioStoreError(`Цей браузер не зберігає аудіо як файл (можливо, приватний перегляд), а доріжка ${file.name} `
+  + `завелика для збереження через пам'ять (${Math.round(file.size / 1048576)} МБ, межа ${MAX_FALLBACK_BYTES / 1048576} МБ).`)
+
+/** The fallback form (the one older versions read): the bytes, only up to MAX_FALLBACK_BYTES — checked before reading. */
+async function putBytes(database: Pick<IDBPDatabase, 'put'>, id: string, file: File) {
+  if (file.size > MAX_FALLBACK_BYTES) throw tooBigForBytes(file)
+  await database.put('files', { audioBytes: await file.arrayBuffer(), type: file.type } satisfies StoredBytes, id)
+}
+
+const PROBE = '.blob-probe'
+
+/**
+ * Whether this storage keeps a Blob and gives it back as a Blob (R033): a one-byte Blob is written, read back and
+ * removed. A full storage (QuotaExceededError) is not taken for "no Blob": it is thrown. Any other failure — Safari in
+ * private mode, or an environment whose Blob is not stored as a Blob — means only the fallback form is used.
+ */
+export async function canStoreBlobs(database: Pick<IDBPDatabase, 'put' | 'get' | 'delete'>): Promise<boolean> {
+  try {
+    await database.put('files', new Blob([new Uint8Array([7])], { type: 'application/octet-stream' }), PROBE)
+    const back = await database.get('files', PROBE) as unknown
+    return back instanceof Blob && back.size === 1
+  } catch (error) {
+    if ((error as { name?: string })?.name === 'QuotaExceededError') throw error
+    return false
+  } finally {
+    await database.delete('files', PROBE).catch(() => {})
   }
 }
 
