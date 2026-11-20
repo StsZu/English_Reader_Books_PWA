@@ -474,7 +474,14 @@ export class ReaderModel {
   }
 
   private async translate(ref: ParagraphRef) {
-    const cached = await this.store.translation(ref)
+    let cached: Awaited<ReturnType<TranslationStore['translation']>>
+    try {
+      cached = await this.store.translation(ref)
+    } catch (error) {
+      // V-25: a failed read shows the error with «Повторити» instead of «Перекладаю…» forever.
+      this.setTranslation(ref, { kind: 'failed', message: `Не вдалося прочитати переклад: ${storageErrorText(error)}` })
+      return
+    }
     if (cached) {
       this.setTranslation(ref, { kind: 'done', lines: cached })
       return

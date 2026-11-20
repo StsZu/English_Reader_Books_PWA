@@ -205,6 +205,23 @@ describe('паралельний переклад', () => {
     await waitUntil(() => model.translationState(p0)?.kind === 'failed', 'failure')
     expect(model.translationNotice.value).toBeNull()
   })
+
+  it('збій читання збереженого перекладу дає «Повторити», а не вічне «Перекладаю…» (V-25)', async () => {
+    const provider = new RecordingProvider()
+    const model = new ReaderModel(translationTestBook(), { provider: () => provider })
+    const store = (model as unknown as { store: { translation: (at: ParagraphRef) => Promise<string[] | null> } }).store
+    const read = store.translation.bind(store)
+    let broken = true
+    store.translation = (at) => (broken ? Promise.reject(new DOMException('read failed', 'UnknownError')) : read(at))
+    model.handleWordTap('First', ref(p0, 0))
+    await waitUntil(() => model.translationState(p0)?.kind === 'failed', 'failure')
+    const failed = model.translationState(p0)
+    expect(failed?.kind === 'failed' && failed.message).toContain('Не вдалося прочитати переклад')
+    expect(provider.calls).toBe(0)
+    broken = false
+    model.retry(p0)
+    await waitForTranslation(model, p0)
+  })
 })
 
 // MARK: - Saved in the reader (stage 2.3)

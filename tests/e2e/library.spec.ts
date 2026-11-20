@@ -144,3 +144,30 @@ test('база не відкрилась: замість порожньої бі
   await page.getByTestId('startFailureReload').click()
   await expect(page.getByTestId(`book-${demoTitle}`)).toBeVisible()
 })
+
+test('книжка, яку не вдалося прочитати з бази, показує причину, «Повторити» й «Мої книжки» (V-25)', async ({ page }) => {
+  await page.goto('./?reset')
+  await expect(page.getByTestId(`book-${demoTitle}`)).toBeVisible()
+  await page.evaluate(() => {
+    const flags = window as unknown as { breakBooks: boolean }
+    flags.breakBooks = true
+    const get = IDBObjectStore.prototype.get
+    IDBObjectStore.prototype.get = function (this: IDBObjectStore, query: IDBValidKey | IDBKeyRange) {
+      if (flags.breakBooks && this.name === 'books') throw new DOMException('read failed', 'UnknownError')
+      return get.call(this, query)
+    }
+  })
+  await page.getByTestId(`book-${demoTitle}`).click()
+  const failure = page.getByTestId('readerFailure')
+  await expect(failure).toBeVisible()
+  await expect(failure).toContainText('Не вдалося відкрити книжку')
+  await expect(failure).toContainText('Дані не видалено.')
+  await page.getByTestId('readerFailureLibrary').click()
+  await expect(page.getByTestId(`book-${demoTitle}`)).toBeVisible()
+
+  await page.getByTestId(`book-${demoTitle}`).click()
+  await expect(failure).toBeVisible()
+  await page.evaluate(() => { (window as unknown as { breakBooks: boolean }).breakBooks = false })
+  await page.getByTestId('readerFailureRetry').click()
+  await expect(page.getByTestId('readerScroll')).toBeVisible()
+})

@@ -1,9 +1,10 @@
 // Port of EnglishReader/Views/ReaderView.swift: layout, scrolling, position, auto-hide and reading-aloud follow.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { effect } from '@preact/signals'
-import { IconButton, NavBar, NoticeBar, ProgressSpinner } from '../components/index.ts'
+import { Button, ContentUnavailable, IconButton, NavBar, NoticeBar, ProgressSpinner } from '../components/index.ts'
 import { loadBook, markOpened } from '../../core/storage/library.ts'
 import { settings } from '../../core/storage/settings.ts'
+import { storageErrorText } from '../../core/storage/db.ts'
 import { highlightForms, words as savedWords } from '../../core/saved/saved.ts'
 import { sameParagraph, type Book } from '../../core/model/book.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
@@ -28,24 +29,45 @@ const NO_FORMS: ReadonlySet<string> = new Set()
 
 export function ReaderScreen({ bookID }: { bookID: string }) {
   const [model, setModel] = useState<ReaderModel | null>(null)
+  /** V-25: the book could not be read from the database. */
+  const [failure, setFailure] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let created: ReaderModel | null = null
     let cancelled = false
-    void loadBook(bookID).then(async (book: Book | null) => {
-      if (!book || cancelled) {
-        if (!book) openLibrary()
-        return
+    void (async () => {
+      try {
+        const book: Book | null = await loadBook(bookID)
+        if (!book || cancelled) {
+          if (!book) openLibrary()
+          return
+        }
+        void markOpened(book.id).catch(() => {})
+        created = new ReaderModel(book)
+        await created.load()
+        if (!cancelled) setModel(created)
+      } catch (error) {
+        created?.dispose()
+        created = null
+        if (!cancelled) setFailure(storageErrorText(error))
       }
-      void markOpened(book.id)
-      created = new ReaderModel(book)
-      await created.load()
-      if (!cancelled) setModel(created)
-    })
+    })()
     return () => {
       cancelled = true
       created?.dispose()
     }
-  }, [bookID])
+  }, [bookID, attempt])
+  if (failure !== null) {
+    return (
+      <div class="reader-loading">
+        <ContentUnavailable icon="exclamationmark.triangle.fill" title="Не вдалося відкрити книжку"
+          description={<>{failure}<br />Дані не видалено.</>} testID="readerFailure">
+          <Button variant="borderedProminent" testID="readerFailureRetry" onClick={() => { setFailure(null); setAttempt((n) => n + 1) }}>Повторити</Button>
+          <Button variant="bordered" testID="readerFailureLibrary" onClick={openLibrary}>Мої книжки</Button>
+        </ContentUnavailable>
+      </div>
+    )
+  }
   if (!model) return <div class="reader-loading"><ProgressSpinner /></div>
   return <Reader model={model} />
 }
