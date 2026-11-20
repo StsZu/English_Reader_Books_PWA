@@ -235,18 +235,45 @@ export function setMediaPlaybackState(state: 'none' | 'paused' | 'playing') {
 
 // MARK: - Wake Lock (keeps the screen on while reading aloud, V-04)
 
-let wakeLock: { release(): Promise<void> } | null = null
+type WakeLock = { release(): Promise<void>; addEventListener?(type: 'release', listener: () => void): void }
+type WakeLockNavigator = Navigator & { wakeLock?: { request(type: 'screen'): Promise<WakeLock> } }
+
+let wakeLock: WakeLock | null = null
+/** True between acquire and release: the system drops the lock when the page is hidden, and it is taken again on return. */
+let wakeLockWanted = false
+let wakeLockRequest: Promise<void> | null = null
+let watchingVisibility = false
+
+async function requestWakeLock() {
+  const nav = navigator as WakeLockNavigator
+  if (wakeLock || wakeLockRequest || !wakeLockWanted || !nav.wakeLock || document.visibilityState !== 'visible') return
+  wakeLockRequest = (async () => {
+    try {
+      const lock = await nav.wakeLock!.request('screen')
+      if (!wakeLockWanted) {
+        await lock.release().catch(() => {})
+        return
+      }
+      wakeLock = lock
+      lock.addEventListener?.('release', () => { if (wakeLock === lock) wakeLock = null })
+    } catch {
+      // Refused (hidden page, low battery): taken again when the page becomes visible.
+    }
+  })().finally(() => { wakeLockRequest = null })
+  await wakeLockRequest
+}
 
 export async function acquireWakeLock() {
-  try {
-    const nav = navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }
-    if (!wakeLock && nav.wakeLock) wakeLock = await nav.wakeLock.request('screen')
-  } catch {
-    wakeLock = null
+  wakeLockWanted = true
+  if (!watchingVisibility) {
+    watchingVisibility = true
+    document.addEventListener('visibilitychange', () => { void requestWakeLock() })
   }
+  await requestWakeLock()
 }
 
 export async function releaseWakeLock() {
+  wakeLockWanted = false
   const lock = wakeLock
   wakeLock = null
   try {

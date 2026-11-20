@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AIError, ReplayMissingError, abortError, type SpeechEngine } from '../../src/contracts.ts'
 import type { Book } from '../../src/core/model/book.ts'
-import { AudioUnplayableError, setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
+import { AudioUnplayableError, acquireWakeLock, releaseWakeLock, setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
 import { MAX_CACHED_AUDIO, MAX_MEMORY_AUDIO, OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
 import { PREFETCH_PARTS, RETRY_DELAY_MS, ReadingController, speechParts } from '../../src/core/speech/reading.ts'
 import { SystemSpeechEngine, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
@@ -563,5 +563,65 @@ describe('ReadingController', () => {
     await tick()
     expect(engine.spoken).toEqual(['A.', 'C.', 'A.'])
     controller.stop()
+  })
+})
+
+// MARK: - Wake lock (audit 2026-11-20, finding 9)
+
+describe('wake lock', () => {
+  class FakeLock {
+    released = false
+    private listeners: (() => void)[] = []
+    addEventListener(_type: 'release', listener: () => void) { this.listeners.push(listener) }
+    async release() { this.systemRelease() }
+    systemRelease() {
+      if (this.released) return
+      this.released = true
+      for (const listener of this.listeners) listener()
+    }
+  }
+
+  it('takes the lock again when the page returns after the system dropped it, and not after release', async () => {
+    const locks: FakeLock[] = []
+    let visibility: DocumentVisibilityState = 'visible'
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => { const lock = new FakeLock(); locks.push(lock); return lock } },
+    })
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    const show = async (state: DocumentVisibilityState) => {
+      visibility = state
+      document.dispatchEvent(new Event('visibilitychange'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    try {
+      await acquireWakeLock()
+      expect(locks).toHaveLength(1)
+      await acquireWakeLock()
+      expect(locks).toHaveLength(1)
+
+      locks[0].systemRelease()
+      await show('hidden')
+      expect(locks).toHaveLength(1)
+      await show('visible')
+      expect(locks).toHaveLength(2)
+      expect(locks[1].released).toBe(false)
+
+      await releaseWakeLock()
+      expect(locks[1].released).toBe(true)
+      await show('hidden')
+      await show('visible')
+      expect(locks).toHaveLength(2)
+
+      const pending = acquireWakeLock()
+      await releaseWakeLock()
+      await pending
+      expect(locks).toHaveLength(3)
+      expect(locks[2].released).toBe(true)
+    } finally {
+      await releaseWakeLock()
+      Reflect.deleteProperty(navigator, 'wakeLock')
+      Reflect.deleteProperty(document, 'visibilityState')
+    }
   })
 })

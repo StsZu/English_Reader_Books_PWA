@@ -209,10 +209,12 @@ export class ReadingController {
       return
     }
     if (this.interrupted) {
+      void acquireWakeLock()
       this.engine.stop()
       this.start(this.index)
       return
     }
+    void acquireWakeLock()
     this.engine.resume()
     this.state.value = 'playing'
     setMediaPlaybackState('playing')
