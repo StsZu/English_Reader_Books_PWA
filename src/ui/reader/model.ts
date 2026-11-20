@@ -19,7 +19,7 @@ import { loadSync } from '../../core/audiobook/store.ts'
 import { buildSyncIndex, sentenceAt, type SyncIndex } from '../../core/prepared/package.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
-import { isQuotaError, storageError, storageErrorText } from '../../core/storage/db.ts'
+import { isQuotaError, saveQuietly, storageError, storageErrorText } from '../../core/storage/db.ts'
 import { settings } from '../../core/storage/settings.ts'
 import {
   isSaved, pendingSentence, quoteFor, removeQuote, removeWordByLemma, saveQuote, saveWord, setPendingSentence,
@@ -488,7 +488,7 @@ export class ReaderModel {
     const context = ref.paragraph > 0 ? paragraphText(chapter.paragraphs[ref.paragraph - 1]) : null
     try {
       const result = await this.provider().translate(paragraph.sentences, context)
-      await this.store.save(result, ref)
+      await saveQuietly(() => this.store.save(result, ref))
       if (this.translationState(ref)) this.setTranslation(ref, { kind: 'done', lines: result })
     } catch (error) {
       const message = errorMessage(error)

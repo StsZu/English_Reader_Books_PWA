@@ -69,6 +69,15 @@ export function storageErrorText(error: unknown): string {
   return error instanceof Error && error.message ? error.message : String(error)
 }
 
+/** Cache write after a paid response (V-23): a failure must not discard the response. */
+export async function saveQuietly(write: () => Promise<void>): Promise<void> {
+  try {
+    await write()
+  } catch (error) {
+    console.warn('Cache write failed:', error)
+  }
+}
+
 /** A write the user did not see fail otherwise (saved words, quotes, reading place); shown by App. */
 export const storageError = signal<string | null>(null)
 

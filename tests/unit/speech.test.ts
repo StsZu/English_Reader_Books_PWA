@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReplayMissingError, abortError, type SpeechEngine } from '../../src/contracts.ts'
 import type { Book } from '../../src/core/model/book.ts'
 import { setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
-import { OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
+import { MAX_CACHED_AUDIO, MAX_MEMORY_AUDIO, OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
 import { PREFETCH_PARTS, RETRY_DELAY_MS, ReadingController, speechParts } from '../../src/core/speech/reading.ts'
 import { SystemSpeechEngine, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
 
@@ -11,15 +11,24 @@ import { SystemSpeechEngine, phraseLimitMs } from '../../src/core/speech/system-
 
 class MemoryCache {
   entries = new Map<string, { body: ArrayBuffer; type: string }>()
+  /** Makes the next writes throw (V-23 tests). */
+  failPuts: { count: number; name: string } | null = null
   async match(key: string) {
     const entry = this.entries.get(key)
     return entry ? new Response(entry.body.slice(0), { headers: { 'Content-Type': entry.type } }) : undefined
   }
   async put(key: string, response: Response) {
+    if (this.failPuts && this.failPuts.count > 0) {
+      this.failPuts.count -= 1
+      throw new DOMException('write failed', this.failPuts.name)
+    }
     this.entries.set(key, { body: await response.arrayBuffer(), type: response.headers.get('Content-Type') ?? '' })
   }
-  async delete(key: string) {
-    return this.entries.delete(key)
+  async delete(key: string | Request) {
+    return this.entries.delete(typeof key === 'string' ? key : key.url)
+  }
+  async keys() {
+    return [...this.entries.keys()].map((url) => new Request(url))
   }
 }
 
@@ -106,6 +115,51 @@ describe('OpenAISpeechEngine', () => {
     await expect(engine.replay(text, () => {})).rejects.toBeInstanceOf(ReplayMissingError)
     expect(await engine.hasAudio(text)).toBe(false)
     expect(counter.calls).toBe(1)
+  })
+
+  it('plays and replays audio that could not be saved, without a second synthesis (V-23)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const cache = (await caches.open('tts')) as unknown as MemoryCache
+    const { engine, counter } = fixtureEngine()
+    const text = `Unsaved ${crypto.randomUUID()}.`
+    cache.failPuts = { count: 1, name: 'UnknownError' }
+    await engine.speak(text, () => {})
+    expect(backend.plays).toBe(1)
+    expect(cache.entries.has(await engine.cacheKey(text))).toBe(false)
+    expect(await engine.hasAudio(text)).toBe(true)
+    await engine.replay(text, () => {})
+    await engine.speak(text, () => {})
+    expect(counter.calls).toBe(1)
+    expect(backend.plays).toBe(3)
+
+    cache.failPuts = { count: MAX_MEMORY_AUDIO, name: 'UnknownError' }
+    for (let i = 0; i < MAX_MEMORY_AUDIO; i++) await engine.audioURL(`Other ${i} ${crypto.randomUUID()}.`)
+    expect(OpenAISpeechEngine.unsavedAudio.size).toBe(MAX_MEMORY_AUDIO)
+    await expect(engine.replay(text, () => {})).rejects.toBeInstanceOf(ReplayMissingError)
+    cache.failPuts = null
+    vi.restoreAllMocks()
+  })
+
+  it('keeps at most MAX_CACHED_AUDIO files and frees the oldest half when storage is full (V-23)', async () => {
+    const cache = (await caches.open('tts')) as unknown as MemoryCache
+    cache.entries.clear()
+    for (let i = 0; i < MAX_CACHED_AUDIO; i++) cache.entries.set(`https://tts.local/old-${i}.mp3`, { body: silentWAV(0.01), type: 'audio/mpeg' })
+    const { engine } = fixtureEngine()
+    const first = `Limit ${crypto.randomUUID()}.`
+    await engine.audioURL(first)
+    expect(cache.entries.size).toBe(MAX_CACHED_AUDIO)
+    expect(cache.entries.has('https://tts.local/old-0.mp3')).toBe(false)
+    expect(cache.entries.has('https://tts.local/old-1.mp3')).toBe(true)
+    expect(cache.entries.has(await engine.cacheKey(first))).toBe(true)
+
+    cache.failPuts = { count: 1, name: 'QuotaExceededError' }
+    const second = `Full ${crypto.randomUUID()}.`
+    await engine.audioURL(second)
+    expect(cache.entries.size).toBe(MAX_CACHED_AUDIO / 2 + 1)
+    expect(cache.entries.has('https://tts.local/old-500.mp3')).toBe(false)
+    expect(cache.entries.has(await engine.cacheKey(first))).toBe(true)
+    expect(cache.entries.has(await engine.cacheKey(second))).toBe(true)
+    cache.entries.clear()
   })
 
   it('concurrent requests share one synthesis', async () => {

@@ -3,7 +3,7 @@
 import { AIError, type WordCard } from '../../contracts.ts'
 import { fixtureCard as languageFixtureCard } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
-import { cache, getValue, setValue } from '../storage/db.ts'
+import { cache, getValue, saveQuietly, setValue } from '../storage/db.ts'
 import { sha256Hex } from '../util/hash.ts'
 import { chatJSON } from './openai.ts'
 import { explanationSystemPrompt, wordCardSystemPrompt } from './prompts.ts'
@@ -95,7 +95,7 @@ export const WordLookupService = {
     if (fixture) return fixture(word)
     const user = JSON.stringify({ word, sentence })
     const card = await chatJSON(model, wordCardSystemPrompt, user, decodeWordCard, signal)
-    await setValue('wordCache', key, encodeWordCard(card))
+    await saveQuietly(() => setValue('wordCache', key, encodeWordCard(card)))
     return card
   },
 }
@@ -141,7 +141,7 @@ export const ExplanationService = {
       text = (await chatJSON(model, explanationSystemPrompt, this.prompt(template, word, sentence), validate, signal)).trim()
       if (!text) throw new AIError({ kind: 'badResponse', detail: 'порожнє пояснення' })
     }
-    await store.set(key, text)
+    await saveQuietly(() => store.set(key, text))
     return text
   },
 }

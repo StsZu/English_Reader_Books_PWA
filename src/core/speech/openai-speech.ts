@@ -6,6 +6,7 @@ import { testFlags } from '../../app/test-mode.ts'
 import { sha256Hex } from '../util/hash.ts'
 import { pauseAudio, playURL, resumeAudio, stopAudio } from './audio.ts'
 import { speech } from '../ai/openai.ts'
+import { isQuotaError } from '../storage/db.ts'
 
 /** Same text as OpenAISpeechEngine.instructions; part of the cache key. */
 export const SPEECH_INSTRUCTIONS = speechInstructions
@@ -13,6 +14,31 @@ export const SPEECH_INSTRUCTIONS = speechInstructions
 export type Synthesizer = (model: string, voice: string, text: string) => Promise<ArrayBuffer>
 
 const CACHE_NAME = 'tts'
+/** V-23: saved MP3 files kept; the oldest go first. */
+export const MAX_CACHED_AUDIO = 1000
+/** V-23: audio that could not be saved stays playable in this tab; the oldest go first. */
+export const MAX_MEMORY_AUDIO = 8
+
+type AudioCache = Pick<Cache, 'match' | 'put' | 'delete' | 'keys'>
+
+/** Deletes the oldest entries so that at most `keep` remain (Cache Storage lists keys in insertion order). */
+async function trimCache(cache: AudioCache, keep: number) {
+  const keys = await cache.keys()
+  for (const request of keys.slice(0, Math.max(0, keys.length - keep))) await cache.delete(request)
+}
+
+/** Saves the file; when storage is full, drops the oldest half once and tries again. */
+async function saveAudio(cache: AudioCache, key: string, data: ArrayBuffer) {
+  const put = () => cache.put(key, new Response(data, { headers: { 'Content-Type': 'audio/mpeg' } }))
+  try {
+    await put()
+  } catch (error) {
+    if (!isQuotaError(error)) throw error
+    await trimCache(cache, Math.floor((await cache.keys()).length / 2))
+    await put()
+  }
+  await trimCache(cache, MAX_CACHED_AUDIO)
+}
 
 /** Network synthesis; replaced only by tests and the test-mode fixture. */
 const networkSynthesizer: Synthesizer = (model, voice, text) => speech(model, voice, text, SPEECH_INSTRUCTIONS)
@@ -43,6 +69,8 @@ export class OpenAISpeechEngine implements ReplayableSpeech {
   static defaultSynthesizer: Synthesizer = testFlags.speech ? fixtureSynthesizer : networkSynthesizer
   /** Number of synthesis requests started in this page. */
   static synthesisCount = 0
+  /** Audio whose cache write failed, by cache key (V-23). */
+  static unsavedAudio = new Map<string, Blob>()
 
   readonly prefersShortParts = true
 
@@ -63,24 +91,46 @@ export class OpenAISpeechEngine implements ReplayableSpeech {
     return `https://tts.local/${digest}.mp3`
   }
 
+  /** Saved audio from Cache Storage or, when that write failed, from this tab's memory. */
+  private async savedAudio(key: string): Promise<Blob | null> {
+    const response = await (await caches.open(CACHE_NAME)).match(key)
+    if (response) return response.blob()
+    return OpenAISpeechEngine.unsavedAudio.get(key) ?? null
+  }
+
+  private async hasSaved(key: string): Promise<boolean> {
+    if (OpenAISpeechEngine.unsavedAudio.has(key)) return true
+    return (await (await caches.open(CACHE_NAME)).match(key)) !== undefined
+  }
+
+  private static keepUnsaved(key: string, data: ArrayBuffer) {
+    const memory = OpenAISpeechEngine.unsavedAudio
+    memory.delete(key)
+    memory.set(key, new Blob([data], { type: 'audio/mpeg' }))
+    while (memory.size > MAX_MEMORY_AUDIO) memory.delete(memory.keys().next().value!)
+  }
+
   /** True when audio for the text with the current model and voice is already saved. */
   async hasAudio(text: string): Promise<boolean> {
-    const cache = await caches.open(CACHE_NAME)
-    return (await cache.match(await this.cacheKey(text))) !== undefined
+    return this.hasSaved(await this.cacheKey(text))
   }
 
   /** Returns the cache key of saved audio, synthesizing it once if needed (shared by concurrent callers). */
   async audioURL(text: string): Promise<string> {
     const key = await this.cacheKey(text)
-    const cache = await caches.open(CACHE_NAME)
-    if (await cache.match(key)) return key
+    if (await this.hasSaved(key)) return key
     const running = this.downloads.get(key)
     if (running) return running
     const { model, voice, synthesize } = this
     OpenAISpeechEngine.synthesisCount += 1
     const task = (async () => {
       const data = await synthesize(model, voice, text)
-      await cache.put(key, new Response(data, { headers: { 'Content-Type': 'audio/mpeg' } }))
+      try {
+        await saveAudio(await caches.open(CACHE_NAME), key, data)
+      } catch (error) {
+        console.warn('Speech cache write failed:', error)
+        OpenAISpeechEngine.keepUnsaved(key, data)
+      }
       return key
     })()
     this.downloads.set(key, task)
@@ -108,23 +158,20 @@ export class OpenAISpeechEngine implements ReplayableSpeech {
   async replay(text: string, onStart: () => void): Promise<void> {
     this.stop()
     const key = await this.cacheKey(text)
-    const cache = await caches.open(CACHE_NAME)
     const generation = this.generation
-    if (!(await cache.match(key))) throw new ReplayMissingError()
+    if (!(await this.hasSaved(key))) throw new ReplayMissingError()
     if (generation !== this.generation) throw abortError()
     await this.play(key, true, onStart)
   }
 
   private async play(key: string, replay: boolean, onStart: () => void): Promise<void> {
-    const cache = await caches.open(CACHE_NAME)
-    const response = await cache.match(key)
     const fail = async (): Promise<never> => {
-      await cache.delete(key)
+      OpenAISpeechEngine.unsavedAudio.delete(key)
+      await (await caches.open(CACHE_NAME)).delete(key)
       throw replay ? new ReplayMissingError() : new AIError({ kind: 'badResponse', detail: 'аудіо не відтворюється' })
     }
-    if (!response) return fail()
-    const blob = await response.blob()
-    if (blob.size < 44) return fail()
+    const blob = await this.savedAudio(key)
+    if (!blob || blob.size < 44) return fail()
     this.releaseURL()
     const url = URL.createObjectURL(blob)
     this.objectURL = url

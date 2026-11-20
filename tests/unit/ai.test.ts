@@ -276,6 +276,29 @@ describe('explanation', () => {
   })
 })
 
+describe('cache write failure (V-23)', () => {
+  afterEach(() => { vi.restoreAllMocks(); ExplanationService.fixture = null })
+
+  it('returns the paid answer when the cache cannot be written; the next request asks again', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    const provider = { translate: async (s: string[]) => s.map(() => 'фрагмент') }
+    expect(await translateFragment('full', 'quota fragment', 'ctx', provider)).toBe('фрагмент')
+
+    stubFetch(() => chat({ headword: 'quota', lemma: 'quota', context_translation: 'квота' }))
+    const sentence = 'Storage is full, quota.'
+    expect((await WordLookupService.lookup('quota', sentence, 'gpt-5.4-mini')).contextTranslation).toBe('квота')
+
+    ExplanationService.fixture = (word) => `Пояснення ${word}`
+    expect(await ExplanationService.explain('quota', sentence, 'T', 'full')).toBe('Пояснення quota')
+    expect(put).toHaveBeenCalled()
+
+    put.mockRestore()
+    expect(await WordLookupService.cached('quota', sentence)).toBeNull()
+    expect(await ExplanationService.cached('quota', sentence, 'T', 'full')).toBeNull()
+  })
+})
+
 describe('verbatim Swift strings', () => {
   const file = 'build/swift-strings.json'
   const strings = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null

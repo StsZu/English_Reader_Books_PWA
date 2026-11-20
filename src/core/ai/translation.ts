@@ -4,7 +4,7 @@ import { AIError, type TranslationProvider } from '../../contracts.ts'
 import { fixtureTranslation } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
 import { paragraphKey, type ParagraphRef } from '../model/book.ts'
-import { cache } from '../storage/db.ts'
+import { cache, saveQuietly } from '../storage/db.ts'
 import { sha256Hex } from '../util/hash.ts'
 import { chatJSON } from './openai.ts'
 import { translationSystemPrompt } from './prompts.ts'
@@ -105,6 +105,6 @@ export async function translateFragment(
   const lines = await provider.translate([text], context)
   const line = lines[0]
   if (line === undefined) throw new AIError({ kind: 'badResponse', detail: 'порожня відповідь' })
-  await store.saveForKey([line], key)
+  await saveQuietly(() => store.saveForKey([line], key))
   return line
 }
