@@ -6,7 +6,7 @@ import { testFlags } from './test-mode.ts'
 import { addBook, books, initLibrary, lastError, resetAll, seedDemoIfNeeded } from '../core/storage/library.ts'
 import { initKey } from '../core/storage/key.ts'
 import { initSaved, removeAllForTests, seedForTests } from '../core/saved/saved.ts'
-import { requestPersistence, storageError } from '../core/storage/db.ts'
+import { requestPersistence, storageError, storageErrorText } from '../core/storage/db.ts'
 import { cleanupAtStart } from '../core/prepared/coordination.ts'
 import { settings } from '../core/storage/settings.ts'
 import { importBook, importFile } from '../core/import/importer.ts'
@@ -19,7 +19,7 @@ import { AIServices } from '../ui/settings/AIServices.tsx'
 import { Gallery } from '../ui/Gallery.tsx'
 import { errorMessage } from '../contracts.ts'
 import { InstallHint } from './InstallHint.tsx'
-import { ConfirmDialog } from '../ui/components/index.ts'
+import { Button, ConfirmDialog, ContentUnavailable } from '../ui/components/index.ts'
 
 effect(() => applyTheme(settings.theme.value))
 
@@ -29,12 +29,20 @@ async function loadDemo() {
   return importBook(new Uint8Array(await response.arrayBuffer()), 'md', 'Demo')
 }
 
+/** Thrown when the stored data could not be read at start (V-24). */
+class StartFailure extends Error {}
+
 async function start() {
-  if (__TEST_MODE__ && testFlags.reset) {
-    await resetAll()
-    removeAllForTests()
+  try {
+    if (__TEST_MODE__ && testFlags.reset) {
+      await resetAll()
+      removeAllForTests()
+    }
+    await Promise.all([initLibrary(), initKey(), initSaved()])
+  } catch (error) {
+    const reason = storageErrorText(error)
+    throw new StartFailure(reason.charAt(0).toUpperCase() + reason.slice(1))
   }
-  await Promise.all([initLibrary(), initKey(), initSaved()])
   if (__TEST_MODE__ && testFlags.reset && testFlags.savedWords) seedForTests()
   if (__TEST_MODE__ && testFlags.voice) settings.voiceEngine.value = testFlags.voice
   await seedDemoIfNeeded(loadDemo)
@@ -58,12 +66,28 @@ const showGallery = __TEST_MODE__ && new URLSearchParams(location.search).has('g
 
 export function App() {
   const [ready, setReady] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   useEffect(() => {
-    if (!showGallery) void start().finally(() => setReady(true))
+    if (!showGallery) {
+      void start()
+        .catch((error) => { if (error instanceof StartFailure) setFailure(error.message) })
+        .finally(() => setReady(true))
+    }
   }, [])
 
   if (showGallery) return <Gallery />
   if (!ready) return null
+  if (failure !== null) {
+    return (
+      <main class="start-failure">
+        <ContentUnavailable icon="exclamationmark.triangle.fill" title="Не вдалося відкрити дані"
+          description={<>{failure}<br />Дані не видалено. Не стирайте дані сайту: спробуйте перезавантажити сторінку.</>}
+          testID="startFailure">
+          <Button variant="borderedProminent" testID="startFailureReload" onClick={() => location.reload()}>Перезавантажити</Button>
+        </ContentUnavailable>
+      </main>
+    )
+  }
 
   const current = route.value
   const reader = current.screen === 'reader' && books.value.some((b) => b.id === current.bookID)

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Book, BookSummary } from '../../src/core/model/book.ts'
-import { DB_NAME, closeDB, getValue, setValue } from '../../src/core/storage/db.ts'
+import { DB_NAME, closeDB, getValue, setValue, storageErrorText } from '../../src/core/storage/db.ts'
 import {
   addBook, books, deleteBook, filterBooks, initLibrary, lastOpened, loadBook, markOpened, resetAll, seedDemoIfNeeded, sortBooks,
 } from '../../src/core/storage/library.ts'
@@ -192,5 +192,33 @@ describe('ключ OpenAI', () => {
     expect(hasStoredKey.value).toBe(false)
     await relaunch()
     expect(openAIKey()).toBeNull()
+  })
+})
+
+describe('з\'єднання з базою (V-24)', () => {
+  const request = <T>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+    r.onsuccess = () => resolve(r.result)
+    r.onerror = () => reject(r.error)
+  })
+
+  it('поступається видаленню бази в іншій вкладці й відкривається знову', async () => {
+    await setValue('meta', 'probe', 1)
+    await request(indexedDB.deleteDatabase(DB_NAME))
+    expect(await getValue('meta', 'probe')).toBeUndefined()
+    await setValue('meta', 'probe', 2)
+    expect(await getValue('meta', 'probe')).toBe(2)
+  })
+
+  it('поступається новішій версії з іншої вкладки; запис після цього — зрозуміла причина', async () => {
+    await setValue('meta', 'probe', 1)
+    const newer = indexedDB.open(DB_NAME, 2)
+    newer.onupgradeneeded = () => {}
+    ;(await request(newer)).close()
+    const error = await setValue('meta', 'probe', 2).then(() => null, (e: unknown) => e)
+    expect((error as Error).name).toBe('VersionError')
+    expect(storageErrorText(error)).toBe('дані збережено новішою версією застосунку; перезавантажте сторінку.')
+    await request(indexedDB.deleteDatabase(DB_NAME))
+    await setValue('meta', 'probe', 3)
+    expect(await getValue('meta', 'probe')).toBe(3)
   })
 })

@@ -988,6 +988,13 @@
 
 /* MARK: Feedback */
 
+/* Start failure instead of the library (V-24). */
+.start-failure {
+  min-height: 100dvh;
+  padding-top: 120px;
+  background: var(--system-background);
+}
+
 .unavailable {
   display: flex;
   flex-direction: column;

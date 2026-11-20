@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { brokenEPUB, drmEPUB, garbageEPUB, partialEPUB, pdfFile, plainText, storedEPUB, type FilePayload } from '../fixtures/e2e/books.ts'
 import { demoBook } from '../fixtures/language.ts'
+import { databaseName } from '../../src/core/language.ts'
 
 test.beforeEach(async ({ page }) => {
   await page.route('https://api.openai.com/**', (route) => route.abort())
@@ -114,4 +115,32 @@ test('знімок бібліотеки', async ({ page }) => {
   await expect(page.getByTestId('book-Test Book')).toBeVisible()
   await page.waitForTimeout(400)
   await page.screenshot({ path: 'build/visual/library.png' })
+})
+
+test('база не відкрилась: замість порожньої бібліотеки — причина й «Перезавантажити» (V-24)', async ({ page }) => {
+  await page.goto('./?reset')
+  await expect(page.getByTestId(`book-${demoTitle}`)).toBeVisible()
+  const ask = (name: string, run: string) => page.evaluate(([db, mode]) => new Promise<void>((resolve, reject) => {
+    const request = mode === 'newer' ? indexedDB.open(db, 2) : indexedDB.deleteDatabase(db)
+    request.onsuccess = () => {
+      if (mode === 'newer') (request.result as IDBDatabase).close()
+      resolve()
+    }
+    request.onerror = () => reject(request.error)
+    request.onblocked = () => reject(new Error('blocked'))
+  }), [name, run])
+
+  // Another tab with a newer version: the open connection gives way instead of blocking it.
+  await ask(databaseName, 'newer')
+  await page.goto('./')
+  const failure = page.getByTestId('startFailure')
+  await expect(failure).toBeVisible()
+  await expect(failure).toContainText('Не вдалося відкрити дані')
+  await expect(failure).toContainText('Дані збережено новішою версією застосунку; перезавантажте сторінку.')
+  await expect(failure).toContainText('Дані не видалено.')
+  await expect(page.getByTestId('libraryEmpty')).toHaveCount(0)
+
+  await ask(databaseName, 'delete')
+  await page.getByTestId('startFailureReload').click()
+  await expect(page.getByTestId(`book-${demoTitle}`)).toBeVisible()
 })

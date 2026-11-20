@@ -23,15 +23,28 @@ export type StoreName = (typeof STORES)[number]
 
 let dbPromise: Promise<IDBPDatabase> | null = null
 
+/**
+ * Opens the database once per page (V-24): a connection the browser closed, or one that blocks an upgrade or
+ * deletion in another tab, is dropped and reopened by the next read or write; a failed open is retried next time.
+ */
 export function db(): Promise<IDBPDatabase> {
-  dbPromise ??= openDB(DB_NAME, DB_VERSION, {
+  if (dbPromise) return dbPromise
+  const forget = () => { if (dbPromise === opening) dbPromise = null }
+  const opening: Promise<IDBPDatabase> = openDB(DB_NAME, DB_VERSION, {
     upgrade(database) {
       for (const name of STORES) {
         if (!database.objectStoreNames.contains(name)) database.createObjectStore(name)
       }
     },
+    blocking() {
+      forget()
+      void opening.then((database) => database.close())
+    },
+    terminated: forget,
   })
-  return dbPromise
+  opening.catch(forget)
+  dbPromise = opening
+  return opening
 }
 
 /** Test hook: forget the open connection so the next call reopens (simulates a relaunch). */
@@ -66,6 +79,7 @@ export const isQuotaError = (error: unknown): boolean => (error as { name?: stri
 /** Ukrainian reason of a failed write. */
 export function storageErrorText(error: unknown): string {
   if (isQuotaError(error)) return 'на пристрої недостатньо місця для даних застосунку.'
+  if ((error as { name?: string } | null)?.name === 'VersionError') return 'дані збережено новішою версією застосунку; перезавантажте сторінку.'
   return error instanceof Error && error.message ? error.message : String(error)
 }
 
