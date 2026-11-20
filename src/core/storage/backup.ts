@@ -301,7 +301,8 @@ export async function restoreBackup(backup: Backup): Promise<void> {
   }
   if (typeof BroadcastChannel !== 'undefined') {
     const channel = new BroadcastChannel(`${DB_NAME}-library`)
-    channel.postMessage('library')
+    // Other tabs reload the library and the saved words (saved.ts reloads on everything but 'library').
+    channel.postMessage('restore')
     channel.close()
   }
 }

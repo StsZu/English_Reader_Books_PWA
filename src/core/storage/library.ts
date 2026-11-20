@@ -21,7 +21,7 @@ let channel: BroadcastChannel | null = null
 function listenToOtherTabs() {
   if (channel || typeof BroadcastChannel === 'undefined') return
   channel = new BroadcastChannel(`${DB_NAME}-library`)
-  channel.onmessage = () => { void reloadIndex() }
+  channel.onmessage = (event) => { if (event.data !== 'saved') void reloadIndex() }
   ;(channel as BroadcastChannel & { unref?: () => void }).unref?.()
 }
 

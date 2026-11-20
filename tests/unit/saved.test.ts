@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WordCard } from '../../src/contracts.ts'
 import {
   CONTEXT_LIMIT, csvField, decodeWord, filterQuotes, filterWords, highlightForms, initSaved, isSaved, matches, quotes, quotesText,
-  removeAllForTests, removeQuote, removeWordByLemma, saveQuote, saveWord, seedForTests, words, wordsCSV, type SavedPlace,
+  applyTraining, removeAllForTests, removeQuote, removeWordByLemma, saveQuote, saveWord, seedForTests, words, wordsCSV, type SavedPlace,
 } from '../../src/core/saved/saved.ts'
 import { fixtureSavedWords } from '../../src/core/language.ts'
 import { fold } from '../../src/core/util/fold.ts'
@@ -125,5 +125,38 @@ describe('цитати й експорт', () => {
     await removeQuote(quotes.value[0].id)
     await reload()
     expect(quotes.value).toEqual([])
+  })
+})
+
+describe('дві вкладки (аудит 2026-11-20, вада 6)', () => {
+  /** A second tab: its own copy of the modules and its own database connection. */
+  async function otherTab() {
+    vi.resetModules()
+    const tab = await import('../../src/core/saved/saved.ts')
+    await tab.initSaved()
+    return tab
+  }
+
+  it('запис зі старішої вкладки не затирає слова, цитати й тренування новішої', async () => {
+    await initSaved()
+    const other = await otherTab()
+    const book = crypto.randomUUID()
+
+    await saveWord(card('went', 'go'), 'She went home.', place(book))
+    await saveQuote('Quote one.', 'Цитата.', false, place(book))
+    // The other tab still shows the lists without them, then saves its own word.
+    expect(other.words.value).toHaveLength(0)
+    await other.saveWord(card('table', 'table'), 'On the table.', place(book))
+    expect(other.words.value.map((w) => w.lemma)).toEqual(['table', 'go'])
+    expect(other.quotes.value.map((q) => q.text)).toEqual(['Quote one.'])
+
+    // Training in this tab (which has not seen «table») keeps it.
+    const go = words.value.find((w) => w.lemma === 'go')!
+    await applyTraining(new Map([[go.id, { level: 2, nextReview: null, unknown: false }]]), new Date())
+    await other.removeQuote(other.quotes.value[0].id)
+
+    await reload()
+    expect(words.value.map((w) => [w.lemma, w.trainingLevel])).toEqual([['table', 0], ['go', 2]])
+    expect(quotes.value).toHaveLength(0)
   })
 })
