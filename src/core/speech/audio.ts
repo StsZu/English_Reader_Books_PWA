@@ -12,6 +12,14 @@ export interface AudioBackend {
   stop(): void
 }
 
+/** The file itself cannot be played (not decodable or not a supported format); other failures leave it intact. */
+export class AudioUnplayableError extends Error {
+  constructor() {
+    super('аудіо не відтворюється')
+    this.name = 'AudioUnplayableError'
+  }
+}
+
 /** Playback that has not moved for this long while it should be playing is reported as stuck. */
 export const STALL_TIMEOUT_MS = 15_000
 
@@ -36,7 +44,11 @@ class ElementBackend implements AudioBackend {
     const audio = this.audio
     return new Promise<void>((resolve, reject) => {
       const onEnded = () => finish(() => resolve())
-      const onError = () => finish(() => reject(new Error('аудіо не відтворюється')))
+      const onError = () => {
+        const code = audio.error?.code
+        const unplayable = code === MediaError.MEDIA_ERR_DECODE || code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+        finish(() => reject(unplayable ? new AudioUnplayableError() : new Error('аудіо не відтворюється')))
+      }
       // Paused by the system (call, Siri, headphones out) rather than by us: the caller resumes later.
       const onPause = () => {
         if (!this.paused && !audio.ended) finish(() => reject(abortError()))
@@ -84,6 +96,7 @@ class ElementBackend implements AudioBackend {
         if (name === 'AbortError' && this.paused) return
         // Interrupted, or iOS refused to start without a tap: the caller resumes on the next tap.
         if (name === 'AbortError' || name === 'NotAllowedError') finish(() => reject(abortError()))
+        else if (name === 'NotSupportedError') finish(() => reject(new AudioUnplayableError()))
         else finish(() => reject(error instanceof Error ? error : new Error('аудіо не відтворюється')))
       })
     })

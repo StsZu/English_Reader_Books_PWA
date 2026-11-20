@@ -1,8 +1,8 @@
 // Ported from EnglishReaderTests/ServiceTests.swift: sentence speech (G4–G8) and the reading queue.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ReplayMissingError, abortError, type SpeechEngine } from '../../src/contracts.ts'
+import { AIError, ReplayMissingError, abortError, type SpeechEngine } from '../../src/contracts.ts'
 import type { Book } from '../../src/core/model/book.ts'
-import { setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
+import { AudioUnplayableError, setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
 import { MAX_CACHED_AUDIO, MAX_MEMORY_AUDIO, OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
 import { PREFETCH_PARTS, RETRY_DELAY_MS, ReadingController, speechParts } from '../../src/core/speech/reading.ts'
 import { SystemSpeechEngine, phraseLimitMs } from '../../src/core/speech/system-speech.ts'
@@ -47,10 +47,14 @@ Object.defineProperty(globalThis, 'caches', {
 
 class FakeBackend implements AudioBackend {
   plays = 0
+  /** Errors the next plays fail with, one per play (audit 2026-11-20, finding 7). */
+  failures: Error[] = []
   private pending: { resolve: () => void; reject: (e: unknown) => void } | null = null
   async play(_url: string, _rate: number, onStart: () => void) {
     this.stop()
     this.plays += 1
+    const failure = this.failures.shift()
+    if (failure) throw failure
     onStart()
     await new Promise<void>((resolve, reject) => {
       this.pending = { resolve, reject }
@@ -160,6 +164,26 @@ describe('OpenAISpeechEngine', () => {
     expect(cache.entries.has(await engine.cacheKey(first))).toBe(true)
     expect(cache.entries.has(await engine.cacheKey(second))).toBe(true)
     cache.entries.clear()
+  })
+
+  it('keeps the saved audio when playback stalls and removes only a file that cannot be played (finding 7)', async () => {
+    const { engine, counter } = fixtureEngine()
+    const text = `Stall ${crypto.randomUUID()}.`
+    const key = await engine.cacheKey(text)
+    const cache = (await caches.open('tts')) as unknown as MemoryCache
+    backend.failures = [new Error('аудіо зависло')]
+    await expect(engine.speak(text, () => {})).rejects.toBeInstanceOf(AIError)
+    expect(cache.entries.has(key)).toBe(true)
+    backend.failures = [new Error('аудіо не відтворюється')]
+    await expect(engine.replay(text, () => {})).rejects.toBeInstanceOf(AIError)
+    expect(cache.entries.has(key)).toBe(true)
+    await engine.speak(text, () => {})
+    expect(counter.calls).toBe(1)
+
+    backend.failures = [new AudioUnplayableError()]
+    await expect(engine.replay(text, () => {})).rejects.toBeInstanceOf(ReplayMissingError)
+    expect(cache.entries.has(key)).toBe(false)
+    expect(counter.calls).toBe(1)
   })
 
   it('concurrent requests share one synthesis', async () => {
@@ -401,6 +425,18 @@ describe('ReadingController', () => {
     controller.stop()
     vi.useRealTimers()
   })
+
+  it('retries a stalled sentence from the saved audio without a second synthesis (finding 7)', async () => {
+    const { engine, counter } = fixtureEngine()
+    const oneSentence: Book = { ...book, chapters: [{ title: '1', paragraphs: [{ kind: 'text', sentences: ['Only.'] }] }] }
+    backend.failures = [new Error('аудіо зависло')]
+    const controller = new ReadingController(oneSentence, () => engine)
+    controller.play({ chapter: 0, paragraph: 0 })
+    await vi.waitFor(() => expect(controller.state.value).toBe('idle'), { timeout: RETRY_DELAY_MS + 4000 })
+    expect(backend.plays).toBe(2)
+    expect(counter.calls).toBe(1)
+    expect(controller.errorMessage.value).toBeNull()
+  }, RETRY_DELAY_MS + 5000)
 
   it('splits long sentences at clause boundaries, short ones stay whole', () => {
     expect(speechParts('Short one.')).toEqual(['Short one.'])

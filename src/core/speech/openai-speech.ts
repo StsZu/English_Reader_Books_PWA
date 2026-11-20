@@ -4,7 +4,7 @@ import { abortError, AIError, ReplayMissingError, type ReplayableSpeech } from '
 import { speechInstructions } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
 import { sha256Hex } from '../util/hash.ts'
-import { pauseAudio, playURL, resumeAudio, stopAudio } from './audio.ts'
+import { AudioUnplayableError, pauseAudio, playURL, resumeAudio, stopAudio } from './audio.ts'
 import { speech } from '../ai/openai.ts'
 import { isQuotaError } from '../storage/db.ts'
 
@@ -182,7 +182,9 @@ export class OpenAISpeechEngine implements ReplayableSpeech {
       await playback
     } catch (error) {
       if ((error as { name?: string })?.name === 'AbortError') throw error
-      return fail()
+      // Only a file that cannot be played is removed; a stall or interruption keeps the paid audio for the retry.
+      if (error instanceof AudioUnplayableError) return fail()
+      throw new AIError({ kind: 'badResponse', detail: 'аудіо не відтворюється' })
     } finally {
       if (this.objectURL === url) {
         this.active = false
