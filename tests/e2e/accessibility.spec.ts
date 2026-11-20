@@ -104,3 +104,41 @@ test('мова тексту книжки, заголовки розділів і
   await expect(page.locator('.navbar-title span')).toHaveAttribute('lang', sourceLanguage)
   await expect(page.locator('.pane-row')).toHaveAttribute('aria-live', 'polite')
 })
+
+// The top paragraph is read at the line scrollToParagraph puts it at: a small gap between paragraphs
+// no longer moves the reader a paragraph back on every layout change (audit 2026-11-20, finding 1).
+for (const settings of [{ paragraphSpacingFactor: 0 }, { fontSize: 14 }]) {
+  test(`місце читання не зсувається після зміни розкладки (${JSON.stringify(settings)})`, async ({ page }) => {
+    await page.setViewportSize({ width: 834, height: 400 })
+    await openDemo(page, '', settings)
+    // A paragraph far enough from the chapter end that the scroll is never clamped when the translation pane changes size.
+    const index = await page.getByTestId('readerScroll').evaluate((el) => {
+      const room = el.scrollHeight - el.clientHeight - 200
+      const fits = [...el.querySelectorAll<HTMLElement>('[data-p]')].filter((p) => p.offsetTop - 28 <= room)
+      const target = fits[fits.length - 1]
+      el.scrollTop = target.offsetTop - 28
+      return Number(target.dataset.p)
+    })
+    expect(index).toBeGreaterThan(0)
+    const status = new RegExp(`· абзац ${index + 1}$`)
+    await expect(page.getByTestId('playbackStatus')).toHaveText(status)
+    for (let i = 0; i < 4; i++) {
+      await page.getByTestId('translationToggle').click()
+      await page.waitForTimeout(200)
+      await expect(page.getByTestId('playbackStatus')).toHaveText(status)
+    }
+  })
+}
+
+// One Esc closes only the top overlay (audit 2026-11-20, finding 2).
+test('Esc закриває лише верхнє вікно', async ({ page }) => {
+  await page.goto('./?reset')
+  await page.getByTestId('settingsButton').click()
+  await page.getByTestId('saveBackup').click()
+  await expect(page.getByTestId('backupPrepared')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('backupPrepared')).toBeHidden()
+  await expect(page.getByTestId('saveBackup')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('saveBackup')).toBeHidden()
+})

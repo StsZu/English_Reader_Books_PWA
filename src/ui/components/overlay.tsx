@@ -43,6 +43,9 @@ export function usePresence(open: boolean, exitMs: number): { mounted: boolean; 
 const focusableSelector =
   'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+/** Open overlays, the last one on top: only the top one answers Esc and keeps Tab inside. */
+const openOverlays: object[] = []
+
 /** Esc closes; Tab stays inside the container; focus returns to the opener on close. */
 export function useDialogFocus(active: boolean, container: { current: HTMLElement | null }, onEscape?: () => void) {
   // The opener is read while rendering, before any layout effect of the content can move the focus inside.
@@ -61,7 +64,11 @@ export function useDialogFocus(active: boolean, container: { current: HTMLElemen
       const first = node?.querySelector<HTMLElement>('[data-autofocus]') ?? node?.querySelector<HTMLElement>(focusableSelector)
       first?.focus({ preventScroll: true })
     }
+    const token = {}
+    openOverlays.push(token)
     function onKey(event: KeyboardEvent) {
+      // Every open overlay listens on the document, so stopPropagation would not keep one Esc from closing them all.
+      if (openOverlays[openOverlays.length - 1] !== token) return
       if (event.key === 'Escape' && onEscape) {
         event.preventDefault()
         event.stopPropagation()
@@ -84,6 +91,7 @@ export function useDialogFocus(active: boolean, container: { current: HTMLElemen
     document.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('keydown', onKey, true)
+      openOverlays.splice(openOverlays.indexOf(token), 1)
       previous?.focus?.({ preventScroll: true })
     }
   }, [active])

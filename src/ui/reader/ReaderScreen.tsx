@@ -112,7 +112,9 @@ function Reader({ model }: { model: ReaderModel }) {
   const updateTopParagraph = () => {
     const el = scroller.current
     if (!el) return
-    const top = el.scrollTop + VERTICAL_PADDING / 2
+    // The same line scrollToParagraph puts a paragraph at (+1 px for rounding): with any gap between paragraphs,
+    // the one above has already ended there, so a layout change never moves the reader a paragraph back.
+    const top = el.scrollTop + VERTICAL_PADDING + 1
     const paragraphs = el.querySelectorAll<HTMLElement>('[data-p]')
     let found = 0
     for (const p of paragraphs) {
