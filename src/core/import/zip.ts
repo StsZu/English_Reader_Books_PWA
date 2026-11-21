@@ -18,6 +18,26 @@ export class ZipError extends Error {
 
 const utf8 = new TextDecoder('utf-8')
 
+/**
+ * V-27: an XML or XHTML file in the encoding it declares: a UTF-16 byte-order mark or bytes, then
+ * `<?xml … encoding="…"?>`; UTF-8 when nothing is declared or the label is unknown.
+ */
+export function decodeMarkup(bytes: Uint8Array): string {
+  const at = (i: number, ...values: number[]) => values.every((v, k) => bytes[i + k] === v)
+  if (at(0, 0xff, 0xfe) || at(0, 0x3c, 0x00, 0x3f, 0x00)) return new TextDecoder('utf-16le').decode(bytes)
+  if (at(0, 0xfe, 0xff) || at(0, 0x00, 0x3c, 0x00, 0x3f)) return new TextDecoder('utf-16be').decode(bytes)
+  const head = String.fromCharCode(...bytes.subarray(0, 200))
+  const label = /^(?:\uFEFF|\xEF\xBB\xBF)?\s*<\?xml[^>]*\bencoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)?.[1]
+  if (label) {
+    try {
+      return new TextDecoder(label).decode(bytes)
+    } catch {
+      // Unknown label: UTF-8 below.
+    }
+  }
+  return utf8.decode(bytes)
+}
+
 /** Total unpacked bytes one archive may produce (R4): a 50 MB file must not expand into gigabytes in memory. */
 export const maxUnpackedSize = 200 * 1024 * 1024
 
@@ -56,7 +76,7 @@ export class ZipArchive {
   }
 
   async readText(path: string): Promise<string> {
-    return utf8.decode(await this.read(path))
+    return decodeMarkup(await this.read(path))
   }
 
   private readCentralDirectory() {

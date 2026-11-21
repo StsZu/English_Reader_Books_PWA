@@ -9,7 +9,7 @@ import { makeBook } from '../../src/core/model/segmenter.ts'
 import { skippedSummary } from '../../src/ui/library/LibraryScreen.tsx'
 import { formatForExtension, importBook, importFile, maxFileSize } from '../../src/core/import/importer.ts'
 import { decodeText, parseMarkdown, parsePlainText } from '../../src/core/import/text.ts'
-import { ZipArchive, ZipError } from '../../src/core/import/zip.ts'
+import { ZipArchive, ZipError, decodeMarkup } from '../../src/core/import/zip.ts'
 import { sourceLanguage } from '../../src/core/language.ts'
 import { demoBook } from '../fixtures/language.ts'
 import { makeEPUB, makeFormattedEPUB, zipArchive } from '../fixtures/zip-writer.ts'
@@ -48,6 +48,30 @@ describe('TextImporter', () => {
   it('Windows-1251', () => {
     const cp1251 = new Uint8Array([0xcf, 0xf0, 0xe8, 0xe2, 0xb3, 0xf2]) // «Привіт»
     expect(decodeText(cp1251)).toBe('Привіт')
+  })
+
+  it('windows-1250, windows-1252, UTF-8 з пошкодженим байтом, кодування з XML (V-27)', () => {
+    const encode = (text: string, encoding: string) => {
+      const decoder = new TextDecoder(encoding)
+      const table = new Map<string, number>()
+      for (let b = 0x80; b <= 0xff; b++) table.set(decoder.decode(new Uint8Array([b])), b)
+      return new Uint8Array([...text].map((c) => c.charCodeAt(0) < 0x80 ? c.charCodeAt(0) : table.get(c)!))
+    }
+    const polish = 'Zażółć gęślą jaźń. Pan Tadeusz był szlachcicem, a żona mówiła: „Śpij”.'
+    expect(decodeText(encode(polish, 'windows-1250'))).toBe(polish)
+    if ((sourceLanguage as string) === 'en') {
+      const english = '“Café” — a naïve résumé, isn’t it?'
+      expect(decodeText(encode(english, 'windows-1252'))).toBe(english)
+    }
+    const damaged = [...utf8('Zażółć gęślą jaźń. '.repeat(5)), 0xff, ...utf8(' Dalej.')]
+    expect(decodeText(new Uint8Array(damaged))).toBe(`${'Zażółć gęślą jaźń. '.repeat(5)}\uFFFD Dalej.`)
+
+    const xhtml = '<?xml version="1.0" encoding="windows-1250"?><html><body><p>Gęślą jaźń</p></body></html>'
+    expect(decodeMarkup(encode(xhtml, 'windows-1250'))).toBe(xhtml)
+    const utf16 = '<?xml version="1.0" encoding="UTF-16"?><p>Привіт, świat</p>'
+    const le = new Uint8Array([...utf16].flatMap((c) => [c.charCodeAt(0) & 0xff, c.charCodeAt(0) >> 8]))
+    expect(decodeMarkup(le)).toBe(utf16)
+    expect(decodeMarkup(utf8('<?xml version="1.0"?><p>Gęślą</p>'))).toBe('<?xml version="1.0"?><p>Gęślą</p>')
   })
 
   it('UTF-8 з BOM і UTF-16 з BOM', () => {

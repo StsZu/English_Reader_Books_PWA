@@ -1,10 +1,27 @@
 // Port of EnglishReader/Import/TextImporter.swift: decoding, plain text and Markdown.
 import { ImportError } from '../../contracts.ts'
-import { chapterHeading } from '../language.ts'
+import { chapterHeading, textEncodings } from '../language.ts'
 import type { RawBook, RawChapter } from '../model/book.ts'
 import { normalizeWhitespace } from '../model/segmenter.ts'
 
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((b, i) => bytes[i] === b)
+
+/**
+ * How much a decoding looks like real text: +1 for each word with non-ASCII letters that is all Cyrillic or Latin with
+ * at least one ASCII letter, −1 for a word that mixes scripts, holds a symbol between letters («Zaїуіж», «³adny») or is
+ * Latin without any ASCII letter («Ďđčâłň» — Cyrillic read as Central European).
+ */
+function plausibility(text: string): number {
+  let score = 0
+  for (const token of text.match(/\S*[^\x00-\x7f]\S*/gu) ?? []) {
+    const word = token.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '')
+    if ([...word].length < 2) continue
+    if (/[^\p{L}\p{M}\x00-\x7f]/u.test(word)) score -= 1
+    else if (/\p{Script=Cyrillic}/u.test(word)) score += /\p{Script=Latin}/u.test(word) ? -1 : 1
+    else score += /[A-Za-z]/.test(word) ? 1 : -1
+  }
+  return score
+}
 
 export function decodeText(data: Uint8Array): string {
   let bytes = data
@@ -22,13 +39,23 @@ export function decodeText(data: Uint8Array): string {
       // Fall through.
     }
   }
-  for (const encoding of ['windows-1251', 'iso-8859-1']) {
+  // V-27: UTF-8 with a few damaged bytes stays UTF-8; the damaged bytes become «\uFFFD».
+  const lossy = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
+  const damaged = lossy.match(/\uFFFD/gu)?.length ?? 0
+  const valid = lossy.match(/[^\x00-\x7f\uFFFD]/gu)?.length ?? 0
+  if (valid >= 10 * damaged) return lossy
+  // V-27: of the single-byte encodings the one whose words look real; on a tie the language's own (language.ts).
+  let best: { text: string; score: number } | null = null
+  for (const encoding of textEncodings) {
     try {
-      return new TextDecoder(encoding).decode(bytes)
+      const text = new TextDecoder(encoding).decode(bytes)
+      const score = plausibility(text)
+      if (!best || score > best.score) best = { text, score }
     } catch {
       // Encoding unavailable; try the next one.
     }
   }
+  if (best) return best.text
   throw new ImportError({ kind: 'unreadable' })
 }
 

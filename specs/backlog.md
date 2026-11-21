@@ -64,6 +64,11 @@
 - Перевірки: нові тести в `tests/languages/pl/language.test.ts` і `tests/unit/segmenter.test.ts` падають на старому коді. Обидві мови: `npm test` 378 / 382, `npm run test:e2e` 93 / 93, `npm run golden` (English проти нативного імпортера — пройдено), `lint`, `typecheck`, `npm run check` — зелені. Уже імпортовані книжки й підготовлені пакети не перебудовуються: нове розбиття — лише для нових імпортів.
 - **Реліз (2026-11-21):** дозвіл користувача — `ok merge`, `ok push`. `main` fast-forward `00c79ee` → `8665b6a`, push; розгорнуто автоматично Cloudflare Workers Builds (обидві перевірки — success). Нові версії EN `a3232c8a`, PL `d6fb1fce`; обидва сайти: `index.html` 200 з правильною назвою, JS 200, CSP на місці, `sw.js` · `8665b6a`. Браузерної перевірки не було. **Відкат:** EN `7c19a79b`, PL `5ebe9b70` (збірка `00c79ee`, код — як `d66cad7`).
 
+## Виправлено (2026-11-21, аудит `TASK/2026-11-20_audit_english_and_polish_readers.md`, вада 11)
+
+- **Файл не в UTF-8 завжди читався як windows-1251, XHTML в EPUB — завжди як UTF-8 (V-27).** Польський TXT у windows-1250 («Zażółć gęślą jaźń» → «Zaїуіж gкњl№ jaџс») і UTF-8 з одним пошкодженим байтом ставали кракозябрами без помилки. Тепер у TXT поодинокі пошкоджені байти UTF-8 стають «\uFFFD», а решта тексту ціла; інакше з windows-1250, windows-1252 і windows-1251 вибирається те, що дає правдоподібні слова (без суміші латиниці й кирилиці, без символів між літерами), а за рівності — кодування мови збірки (`src/core/import/text.ts`, `textEncodings` у `src/languages/*.ts`). EPUB читає кодування з BOM UTF-16 або `<?xml … encoding="…"?>` (`decodeMarkup` у `src/core/import/zip.ts`).
+- Перевірки: новий тест у `tests/unit/import.test.ts` падає на старому коді. Обидві мови: `npm test` 379 / 383, `npm run test:e2e` 93 / 93, `npm run golden` — пройдено, `lint`, `typecheck`, `npm run check` — зелені. Західноєвропейський текст у windows-1252, імпортований у Polish Reader, може прочитатися як windows-1250 («naďve»), бо слова в обох виглядають правдоподібно; справжніх файлів у windows-1250 не перевірено.
+
 ## Виправити
 
 | № | Що | Чому | Пропозиція |

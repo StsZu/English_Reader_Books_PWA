@@ -46,6 +46,9 @@ export const capitalLetterWords: string[] = []
 /** Whether a dialogue dash after the end of a sentence starts a new one («…? — Jestem Polak.»). */
 export const dialogueDashStartsSentence = true
 
+/** Single-byte encodings tried for a text file that is not UTF-8; on a tie the first wins (V-27). */
+export const textEncodings = ['windows-1250', 'windows-1252', 'windows-1251']
+
 /** Chapter headings in plain-text books. */
 export const chapterHeading = /^(chapter|part|book|prologue|epilogue|rozdział|część|księga|tom|prolog|epilog)(?=$|[\s.:,—–-]).{0,60}$/iu
 
