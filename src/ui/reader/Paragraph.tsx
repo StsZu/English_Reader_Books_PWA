@@ -4,6 +4,7 @@ import { memo } from 'preact/compat'
 import type { Paragraph as ParagraphData, TextMark } from '../../core/model/book.ts'
 import type { WordRange } from '../../core/model/segmenter.ts'
 import { sourceLanguage } from '../../core/language.ts'
+import { wordForm } from '../../core/util/fold.ts'
 
 export interface ParagraphProps {
   index: number
@@ -55,7 +56,7 @@ function ParagraphView({ index, paragraph, wordRanges, highlighted, selection, w
           const word = sentence.slice(range.start, range.end)
           let cls = 'w' + styleClass(paragraph.marks, s, range.start, range.end, true)
           if (inRange(s, w, selection)) cls += ' sel'
-          if (savedForms.size > 0 && savedForms.has(word.toLowerCase())) cls += ' saved'
+          if (savedForms.size > 0 && savedForms.has(wordForm(word))) cls += ' saved'
           if (wordCursor && wordCursor.sentence === s && wordCursor.word === w) cls += ' cursor'
           pieces.push(<span class={cls} data-w={w}>{word}</span>)
           cursor = range.end

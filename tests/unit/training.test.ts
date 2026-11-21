@@ -42,6 +42,8 @@ describe('набір і рівні', () => {
     expect(update(5, [true], nowDate)?.level).toBe(5)
     expect(tokens('look up')).toEqual(['look', 'up'])
     expect(tokens('river')).toEqual(['r', 'i', 'v', 'e', 'r'])
+    // A word written with combining marks: one tile per letter (audit 2026-11-20).
+    expect(tokens('żółw'.normalize('NFD'))).toEqual(['ż', 'ó', 'ł', 'w'])
   })
 
   // testTrainingOptionsAvoidDuplicatesAndOwnMeanings

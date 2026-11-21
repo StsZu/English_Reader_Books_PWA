@@ -54,6 +54,20 @@ describe('збережені слова', () => {
     expect(words.value.length).toBe(1)
   })
 
+  it('слово з літерами з комбінованими знаками (NFD) — те саме слово, що й NFC (аудит 2026-11-20)', async () => {
+    const nfc = 'żółw'
+    const nfd = nfc.normalize('NFD')
+    expect(nfd).not.toBe(nfc)
+    await saveWord(card(nfc, nfc), 'Żółw szedł.', place('b'))
+    await saveWord(card(nfd, nfd), 'Ten żółw.', place('b', 1))
+    expect(words.value.length).toBe(1)
+    expect(words.value[0].contexts.length).toBe(2)
+    expect(isSaved(nfd)).toBe(true)
+    expect(highlightForms().has(nfc)).toBe(true)
+    await removeWordByLemma(nfd)
+    expect(words.value.length).toBe(0)
+  })
+
   it('пошук не залежить від діакритики', async () => {
     await saveWord(card('cafe', 'café'), 'At the café.', place('b'))
     expect(filterWords(null, 'CAFE').length).toBe(1)

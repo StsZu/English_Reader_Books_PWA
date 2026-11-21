@@ -5,7 +5,7 @@ import { fixtureSavedWords, fixtureSentence } from '../language.ts'
 import type { WordCard } from '../../contracts.ts'
 import type { ParagraphRef, SentenceRef } from '../model/book.ts'
 import { DB_NAME, getValue, storageError, storageErrorText, transact } from '../storage/db.ts'
-import { fold } from '../util/fold.ts'
+import { fold, wordForm } from '../util/fold.ts'
 
 export interface SavedPlace {
   bookID: string
@@ -63,7 +63,7 @@ export interface TrainingUpdate {
 export const CONTEXT_LIMIT = 5
 const KEY = 'saved'
 
-export const wordKey = (word: Pick<SavedWord, 'lemma'>): string => word.lemma.toLowerCase()
+export const wordKey = (word: Pick<SavedWord, 'lemma'>): string => wordForm(word.lemma)
 
 export const words = signal<SavedWord[]>([])
 export const quotes = signal<SavedQuote[]>([])
@@ -152,7 +152,7 @@ async function update(change: (lists: SavedLists) => SavedLists): Promise<void> 
 }
 
 export function wordFor(lemma: string): SavedWord | undefined {
-  const key = lemma.toLowerCase()
+  const key = wordForm(lemma)
   return words.value.find((w) => wordKey(w) === key)
 }
 
@@ -169,7 +169,7 @@ export async function saveWord(card: WordCard, sentence: string, place: SavedPla
   }
   await update((lists) => {
     const list = [...lists.words]
-    const index = list.findIndex((w) => wordKey(w) === lemma.toLowerCase())
+    const index = list.findIndex((w) => wordKey(w) === wordForm(lemma))
     if (index >= 0) {
       const [existing] = list.splice(index, 1)
       const contexts = existing.contexts.filter((c) => !(c.sentence === sentence && c.place.bookID === place.bookID))
@@ -183,7 +183,7 @@ export async function saveWord(card: WordCard, sentence: string, place: SavedPla
 }
 
 export async function removeWordByLemma(lemma: string): Promise<void> {
-  const key = lemma.toLowerCase()
+  const key = wordForm(lemma)
   await update((lists) => ({ ...lists, words: lists.words.filter((w) => wordKey(w) !== key) }))
 }
 
@@ -238,10 +238,10 @@ export function filterQuotes(bookID: string | null, query: string, list: SavedQu
 export function highlightForms(list: SavedWord[] = words.value): Set<string> {
   const forms = new Set<string>()
   for (const w of list) {
-    forms.add(w.headword.toLowerCase())
-    forms.add(w.lemma.toLowerCase())
+    forms.add(wordForm(w.headword))
+    forms.add(wordForm(w.lemma))
     for (const form of w.forms.split('—')) {
-      const trimmed = form.trim().toLowerCase()
+      const trimmed = wordForm(form.trim())
       if (trimmed && !trimmed.includes(' ')) forms.add(trimmed)
     }
   }

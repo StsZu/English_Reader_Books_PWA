@@ -3,6 +3,7 @@
 import type { SavedWord, TrainingUpdate } from '../saved/saved.ts'
 import { sourceLanguageName } from '../language.ts'
 import { wordKey } from '../saved/saved.ts'
+import { wordForm } from '../util/fold.ts'
 
 /** Random source returning values in [0, 1); injectable for deterministic tests. */
 export type Rng = () => number
@@ -80,23 +81,23 @@ export function randomSet(words: SavedWord[], count: number, rng: Rng = defaultR
 /** Answer plus up to three distractors: same part of speech first, no duplicates, never the word's own meanings. */
 export function options(word: SavedWord, pool: SavedWord[], value: (w: SavedWord) => string, count = 4, rng: Rng = defaultRng): string[] {
   const answer = value(word)
-  const excluded = new Set([answer.toLowerCase(), ...word.otherTranslations.map((t) => t.toLowerCase())])
+  const excluded = new Set([wordForm(answer), ...word.otherTranslations.map(wordForm)])
   const rank = (w: SavedWord) => (w.partOfSpeech === word.partOfSpeech ? 0 : 1)
   const candidates = shuffled(pool.filter((w) => wordKey(w) !== wordKey(word)), rng).sort((a, b) => rank(a) - rank(b))
   const result = [answer]
   for (const candidate of candidates) {
     if (result.length >= count) break
     const text = value(candidate)
-    if (!text || excluded.has(text.toLowerCase())) continue
-    excluded.add(text.toLowerCase())
+    if (!text || excluded.has(wordForm(text))) continue
+    excluded.add(wordForm(text))
     result.push(text)
   }
   return shuffled(result, rng)
 }
 
-/** Letters of a word, or words of a phrase. */
+/** Letters of a word, or words of a phrase; NFC first, so «ó» is one tile, not «o» and a combining mark. */
 export function tokens(answer: string): string[] {
-  const trimmed = answer.trim()
+  const trimmed = answer.normalize('NFC').trim()
   if (trimmed.includes(' ')) return trimmed.split(' ').filter(Boolean)
   return [...trimmed]
 }

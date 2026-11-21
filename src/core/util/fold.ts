@@ -3,6 +3,9 @@
 /** Letters that NFD keeps whole, with their Latin base for search. */
 const baseLetters: Record<string, string> = { ł: 'l', đ: 'd', ø: 'o', ß: 'ss', æ: 'ae', œ: 'oe' }
 
+/** One form for comparing words: NFC and lower case, so «żółw» written with combining marks is the same word (audit 2026-11-20). */
+export const wordForm = (text: string): string => text.normalize('NFC').toLowerCase()
+
 /** Case- and diacritic-insensitive form for search («lodz» finds «Łódź»). */
 export function fold(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[łđøßæœ]/gu, (letter) => baseLetters[letter])
