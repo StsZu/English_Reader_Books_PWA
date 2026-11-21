@@ -34,22 +34,32 @@ const chapters: Chapter[] = [{
   ],
 }]
 
-/** Another book of the same shape (a control book in the library): its own title, translations and audio bytes. */
-export interface BookVariant { title?: string; translations?: Record<string, string[]>; fill?: number }
+/** Another book of the same shape (a control book in the library): its own title, translations and audio bytes.
+ *  `long`: the first chapter goes on for 40 more paragraphs, the last of them «Marker paragraph.», and a second chapter follows. */
+export interface BookVariant { title?: string; translations?: Record<string, string[]>; fill?: number; long?: boolean }
+
+function longChapters(): Chapter[] {
+  const filler = Array.from({ length: 40 }, (_, i) => ({ kind: 'text' as const, sentences: [i === 39 ? 'Marker paragraph.' : `Filler ${i + 1}.`] }))
+  return [{ ...chapters[0], paragraphs: [...chapters[0].paragraphs, ...filler] }, { title: 'Two', paragraphs: [{ kind: 'text', sentences: ['Second chapter.'] }] }]
+}
+
+const longTranslations = (book: Chapter[]) => Object.fromEntries(book.flatMap((chapter, c) => chapter.paragraphs.map((p, i) =>
+  [`${c}-${i}`, (TRANSLATIONS as Record<string, string[]>)[`${c}-${i}`] ?? (p.kind === 'text' ? p.sentences.map(() => 'Переклад.') : [])])))
 
 const TRANSLATIONS = { '0-0': ['Перше речення.', 'Друге речення.'], '0-1': ['Третє речення.'] }
 
 export async function packageFiles(variant: BookVariant = {}) {
   const audio = wav(30, variant.fill)
+  const bookChapters = variant.long ? longChapters() : chapters
   const pkg: ReaderPackage = {
     format: PACKAGE_FORMAT,
     version: PACKAGE_VERSION,
     packageId: 'synthetic',
-    edition: await editionHash(chapters),
+    edition: await editionHash(bookChapters),
     language: sourceLanguage,
     translationLanguage: 'uk',
-    book: { title: variant.title ?? preparedText.title, author: 'Test', format: 'txt', chapters },
-    translations: variant.translations ?? TRANSLATIONS,
+    book: { title: variant.title ?? preparedText.title, author: 'Test', format: 'txt', chapters: bookChapters },
+    translations: variant.translations ?? (variant.long ? longTranslations(bookChapters) : TRANSLATIONS),
     tracks: [{ id: 't1', name: 'synthetic.wav', size: audio.length, sha256: createHash('sha256').update(audio).digest('hex') }],
     // 0–3 s: an introduction without text; the second paragraph from 20 s.
     sync: { '0-0': [['t1', 3, 10], ['t1', 10.2, 18]], '0-1': [['t1', 20, 28]] },

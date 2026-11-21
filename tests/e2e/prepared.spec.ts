@@ -218,3 +218,32 @@ test('повторний імпорт — окрема копія «(2)»; дж�
   await expect(page.getByTestId(`book-${preparedText.title} (2)`)).toBeVisible()
   expect(requests.filter((u) => u.includes('example.org'))).toEqual([])
 })
+
+test('аудіо на паузі не перетягує екран до свого речення після переходу через «Зміст» і пошук (аудит 2026-11-20)', async ({ page }) => {
+  await page.route('https://api.openai.com/**', (route) => route.abort())
+  await page.goto('./?reset')
+  await page.getByTestId('importPreparedInput').setInputFiles(await packageFiles({ long: true }))
+  await expect(page.getByTestId('audioBar')).toBeVisible()
+  await page.getByTestId('audioForward').click()
+  await page.getByTestId('audioPlay').click()
+  await expect(sentence(page, 0, 0)).toHaveClass(/active/, { timeout: 5_000 })
+  await page.getByTestId('audioPause').click()
+
+  // To the second chapter and back to the end of the first one, where the heard sentence is far above.
+  await page.getByTestId('contentsButton').click()
+  await page.getByTestId('chapter-1').click()
+  await expect(page.locator('.navbar-title')).toContainText('Two')
+  await page.getByTestId('contentsButton').click()
+  await page.getByTestId('bookSearch').fill('Marker')
+  await page.getByTestId('searchResult-0').click()
+  await expect(page.locator('.navbar-title')).toContainText(preparedText.heading)
+  const marker = page.locator('[data-p="41"]')
+  await expect(marker).toBeInViewport()
+  await page.waitForTimeout(1_000)
+  await expect(marker).toBeInViewport()
+  await expect(sentence(page, 0, 0)).not.toBeInViewport()
+
+  // Playing again, the reader follows the audio.
+  await page.getByTestId('audioPlay').click()
+  await expect(sentence(page, 0, 0)).toBeInViewport({ timeout: 5_000 })
+})

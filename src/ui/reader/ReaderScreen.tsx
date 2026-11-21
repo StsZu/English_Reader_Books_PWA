@@ -247,12 +247,19 @@ function Reader({ model }: { model: ReaderModel }) {
   }, [currentParagraph?.chapter, currentParagraph?.paragraph])
 
   // A prepared book: long paragraphs, so the heard sentence itself is kept on screen (specs/013-prepared-book).
+  // A sentence already followed is brought back only while the audio plays: on pause a chapter chosen in «Зміст»
+  // or in search stays where the reader went (audit 2026-11-20).
   const heard = model.audioSentence.value
+  const audioPlaying = model.audiobook.state.value === 'playing'
+  const followedSentence = useRef<string | null>(null)
   useEffect(() => {
     if (!heard || heard.paragraph.chapter !== model.chapter.value) return
+    const key = `${heard.paragraph.chapter}-${heard.paragraph.paragraph}-${heard.sentence}`
+    if (key === followedSentence.current && !audioPlaying) return
     const el = scroller.current
     const target = paragraphElement(heard.paragraph.paragraph)?.querySelector<HTMLElement>(`[data-s="${heard.sentence}"]`)
     if (!el || !target) return
+    followedSentence.current = key
     const view = el.getBoundingClientRect()
     const box = target.getBoundingClientRect()
     if (box.top >= view.top && box.bottom <= view.bottom) return
@@ -261,7 +268,7 @@ function Reader({ model }: { model: ReaderModel }) {
     s.user = false
     target.scrollIntoView({ block: 'center', behavior: 'smooth' })
     settleLater()
-  }, [heard?.paragraph.chapter, heard?.paragraph.paragraph, heard?.sentence, chapterIndex])
+  }, [heard?.paragraph.chapter, heard?.paragraph.paragraph, heard?.sentence, chapterIndex, audioPlaying])
 
   // Gestures on the text (G1–G7, X1).
   useEffect(() => {
