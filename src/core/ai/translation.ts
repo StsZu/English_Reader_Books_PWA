@@ -17,10 +17,43 @@ const validateTranslations = (value: unknown): string[] | null => {
   return Array.isArray(list) && list.every((item) => typeof item === 'string') ? list : null
 }
 
+/** One request carries at most this many sentences and characters; a longer paragraph goes in several (spec.md V-28). */
+export const MAX_SENTENCES_PER_REQUEST = 20
+export const MAX_CHARS_PER_REQUEST = 3_000
+
+/** Consecutive parts of a paragraph within both limits; a sentence longer than the limit goes alone. */
+export function translationChunks(sentences: string[]): string[][] {
+  const chunks: string[][] = []
+  let chunk: string[] = []
+  let chars = 0
+  for (const sentence of sentences) {
+    if (chunk.length > 0 && (chunk.length >= MAX_SENTENCES_PER_REQUEST || chars + sentence.length > MAX_CHARS_PER_REQUEST)) {
+      chunks.push(chunk)
+      chunk = []
+      chars = 0
+    }
+    chunk.push(sentence)
+    chars += sentence.length
+  }
+  if (chunk.length > 0) chunks.push(chunk)
+  return chunks
+}
+
 export class OpenAITranslationProvider implements TranslationProvider {
   constructor(readonly model: string) {}
 
+  /** A long paragraph is translated part by part; each later part has the text before it as context. */
   async translate(sentences: string[], context?: string | null, signal?: AbortSignal): Promise<string[]> {
+    const result: string[] = []
+    let before = context ?? null
+    for (const chunk of translationChunks(sentences)) {
+      result.push(...await this.translateChunk(chunk, before, signal))
+      before = chunk.join(' ')
+    }
+    return result
+  }
+
+  private async translateChunk(sentences: string[], context: string | null, signal?: AbortSignal): Promise<string[]> {
     const payload: Record<string, unknown> = { sentences }
     if (context) payload.context = context.slice(-600)
     const user = JSON.stringify(payload)

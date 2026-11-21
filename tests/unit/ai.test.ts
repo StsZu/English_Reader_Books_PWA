@@ -5,7 +5,7 @@ import { AIError, aiErrorText, needsSettings, type AIServiceError } from '../../
 import { SPEECH_TIMEOUT_MS, chatJSON, mapError, setKeyProvider, speech } from '../../src/core/ai/openai.ts'
 import * as prompts from '../../src/core/ai/prompts.ts'
 import {
-  OpenAITranslationProvider, TestTranslationProvider, TranslationStore, fragmentCacheKey, translateFragment, translationStats,
+  MAX_CHARS_PER_REQUEST, MAX_SENTENCES_PER_REQUEST, OpenAITranslationProvider, TestTranslationProvider, TranslationStore, fragmentCacheKey, translateFragment, translationStats,
 } from '../../src/core/ai/translation.ts'
 import { ExplanationService, WordLookupService, decodeWordCard, encodeWordCard } from '../../src/core/ai/word.ts'
 import { closeDB } from '../../src/core/storage/db.ts'
@@ -180,6 +180,23 @@ describe('deadline of the whole response (R3)', () => {
 })
 
 describe('translation', () => {
+  it('translates a long paragraph in parts within the limits, each with the text before it as context (audit 2026-11-20)', async () => {
+    stubFetch((_url, body) => {
+      const user = JSON.parse((body.messages as { content: string }[])[1].content) as { sentences: string[] }
+      return chat({ translations: user.sentences.map((s) => `UA ${s}`) })
+    })
+    const sentences = Array.from({ length: 2 * MAX_SENTENCES_PER_REQUEST + 5 }, (_, i) => `Sentence ${i}.`)
+    const long = 'x'.repeat(MAX_CHARS_PER_REQUEST)
+    const result = await new OpenAITranslationProvider('gpt-5.4-mini').translate([...sentences, long, 'Last.'], 'Before.')
+    expect(result).toEqual([...sentences, long, 'Last.'].map((s) => `UA ${s}`))
+    const users = requests.map((r) => JSON.parse((r.body.messages as { content: string }[])[1].content) as { sentences: string[]; context?: string })
+    expect(users.map((u) => u.sentences.length)).toEqual([MAX_SENTENCES_PER_REQUEST, MAX_SENTENCES_PER_REQUEST, 5, 1, 1])
+    for (const u of users) expect(u.sentences.join(' ').length <= MAX_CHARS_PER_REQUEST || u.sentences.length === 1).toBe(true)
+    expect(users[0].context).toBe('Before.')
+    expect(users[1].context).toBe(users[0].sentences.join(' ').slice(-600))
+    expect(users[4].context).toBe(long.slice(-600))
+  })
+
   it('sends sentences with the previous paragraph as context (last 600 chars)', async () => {
     stubFetch(() => chat({ translations: ['Один.', 'Два.'] }))
     const result = await new OpenAITranslationProvider('gpt-5.4-mini').translate(['One.', 'Two.'], 'c'.repeat(700))
