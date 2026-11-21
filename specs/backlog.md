@@ -140,6 +140,7 @@
 
 - **Іменовані сутності HTML поза коротким списком лишались у тексті:** `&bdquo;Tak&rdquo; &mdash; kr&oacute;l` ставало `&bdquo;Tak” — kr&oacute;l`. Тепер розпізнаються всі 252 назви XHTML 1.0 / HTML 4 і HTML5-назви літер Latin Extended-A (`src/core/import/entities.ts`, згенеровано з `html.entities` Python; `src/core/import/html.ts`; `spec.md` V-30). Уже імпортовані книжки не змінюються — для виправлення їх треба імпортувати знову.
 - Перевірки: новий тест у `tests/unit/import.test.ts` падає на старому коді. Обидві мови: `npm test` 389 / 393, `npm run test:e2e` 96 / 96, `npm run golden` (demo, pg1661 — пройдено), `lint`, `typecheck`, `npm run check` — зелені; JS +2 КБ gzip (97,2 / 97,7 КБ).
+- **Реліз (2026-11-21):** дозвіл користувача — `ok commit`, `ok merge`, `ok push`. `main` fast-forward `2d07818` → `bd26733`, push; розгорнуто автоматично Cloudflare Workers Builds (обидві перевірки — success). Нові версії EN `8de5a03a`, PL `ad764628`; обидва сайти: `index.html` 200, JS 200 (таблиця сутностей у збірці є), CSP на місці, `sw.js` · `bd26733`. Браузерної перевірки не було. **Відкат:** EN `06660fef`, PL `6593b12d` (збірка `2d07818`, код — як `41c7bcf`).
 
 ## Виправити
 
