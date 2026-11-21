@@ -451,6 +451,21 @@
   .playback-loading-title { display: none; }
 }
 
+/* A narrow window: the pane buttons show only their icons, so the translation keeps its room; the title stays
+   the accessible name (audit 2026-11-20). */
+@media (max-width: 600px) {
+  .pane-row { gap: 8px; }
+  .pane-controls { gap: 6px; }
+  .pane-controls .btn-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* MARK: Keyboard shortcuts sheet */
 
 .shortcuts {

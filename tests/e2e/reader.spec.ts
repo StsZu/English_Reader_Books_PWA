@@ -338,3 +338,20 @@ test('читання голосом з клавіатури: пробіл — «
   await expect(page.getByTestId('stopSentenceSpeech')).toBeVisible()
   await page.getByTestId('stopSentenceSpeech').click()
 })
+
+test('вузьке вікно 390 px: панель фрагмента вміщує текст і всі кнопки (аудит 2026-11-20)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openDemo(page, 'testTranslation&testSpeech&voice=openAI')
+  await longPress(page, word(page, demoBook.forwardFragment.from), word(page, demoBook.forwardFragment.to))
+  await expect(page.getByTestId('saveFragment')).toBeVisible()
+  const pane = (await page.getByTestId('parallelTranslationPane').boundingBox())!
+  for (const id of ['fragmentBadge', 'speakFragment', 'copyFragment', 'saveFragment', 'hideParallelTranslation']) {
+    const box = (await page.getByTestId(id).boundingBox())!
+    expect(box.x, id).toBeGreaterThanOrEqual(pane.x)
+    expect(box.x + box.width, id).toBeLessThanOrEqual(pane.x + pane.width)
+    expect(box.width, id).toBeGreaterThanOrEqual(32)
+  }
+  expect((await page.getByTestId('fragmentTranslation').boundingBox())!.width).toBeGreaterThanOrEqual(120)
+  await expect(page.getByTestId('copyFragment')).toHaveAccessibleName('Копіювати')
+  await expect(page.getByTestId('saveFragment')).toHaveAccessibleName('Зберегти')
+})
