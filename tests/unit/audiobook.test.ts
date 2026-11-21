@@ -4,8 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { AudiobookPlayer, LONG_PAUSE_MS, type MediaElement } from '../../src/core/audiobook/player.ts'
 import {
   addTracks, closeAudioDB, compareNames, deleteAudio, isAudioFile, listTracks, loadAudioPosition, removeOrphanAudio,
-  saveAudioPosition, setTracks, trackFile,
+  saveAudioPosition, setTracks, trackFile, deleteTrackFile,
 } from '../../src/core/audiobook/store.ts'
+import { IMPORT_LOCK, cleanupAtStart, setLocksForTests } from '../../src/core/prepared/coordination.ts'
+import { addBook } from '../../src/core/storage/library.ts'
+import { makeBook } from '../../src/core/model/segmenter.ts'
+import { makeLocks } from '../fixtures/locks.ts'
 
 // Node's File survives fake-indexeddb's structured clone (happy-dom's does not), like a real Blob in Safari.
 const file = (name: string, size = 10, type = 'audio/mpeg') => new NodeFile([new Uint8Array(size)], name, { type }) as unknown as File
@@ -181,6 +185,47 @@ describe('AudiobookPlayer', () => {
     await flush()
     expect(player.track.value).toBe(1)
     expect(player.state.value).toBe('paused')
+  })
+
+  it('a missing next file stops with its message instead of replaying the ended track (audit 2026-11-20)', async () => {
+    const { element, player } = await playerWith(['01.mp3', '02.mp3'])
+    await deleteTrackFile(player.tracks.value[1].id)
+    player.play()
+    await flush()
+    const plays = element.plays
+    element.end()
+    await flush()
+    expect(element.plays).toBe(plays)
+    expect(player.state.value).toBe('paused')
+    expect(player.error.value).toBe('Файл «02.mp3» не знайдено. Додайте його ще раз.')
+  })
+
+  it('adding audio holds the lock that the start cleanup of another tab waits for (audit 2026-11-20)', async () => {
+    const manager = makeLocks()
+    const held: string[] = []
+    let holding = 0
+    setLocksForTests({
+      request: (name, options, callback) => manager.request(name, options, async () => {
+        held.push(name)
+        holding++
+        try { return await callback() } finally { holding-- }
+      }),
+    })
+    try {
+      const { bookID, player } = await playerWith(['01.mp3'])
+      await addBook(makeBook({ title: 'Audio', author: '', chapters: [{ title: '1', blocks: [{ kind: 'text', text: 'One.' }] }] }, 'txt', bookID))
+      let cleanupRanDuringAdd = false
+      const adding = player.add([file('02.mp3'), file('03.mp3')])
+      const cleanup = cleanupAtStart().then(() => { cleanupRanDuringAdd = holding > 0 })
+      await Promise.all([adding, cleanup])
+      expect(held).toEqual([IMPORT_LOCK, IMPORT_LOCK])
+      expect(cleanupRanDuringAdd).toBe(false)
+      const tracks = await listTracks(bookID)
+      expect(tracks.map((t) => t.name)).toEqual(['01.mp3', '02.mp3', '03.mp3'])
+      for (const track of tracks) expect(await trackFile(track.id)).not.toBeNull()
+    } finally {
+      setLocksForTests(undefined)
+    }
   })
 
   it('takes a duration that comes only with a later durationchange; time, seek and the place stay right', async () => {

@@ -1,7 +1,7 @@
 // «Аудіокнига»: the book's audio files — add from «Файли», choose, reorder, delete; storage used.
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { AUDIO_ACCEPT, totalSize } from '../../core/audiobook/store.ts'
-import { requestPersistence } from '../../core/storage/db.ts'
+import { isQuotaError, requestPersistence, storageErrorText } from '../../core/storage/db.ts'
 import { formatBytes, formatTime } from '../../core/util/format.ts'
 import { Button, ConfirmDialog, FormSheet, IconButton, ProgressSpinner } from '../components/index.ts'
 import type { ReaderModel } from './model.ts'
@@ -48,8 +48,10 @@ export function AudioSheet({ model }: { model: ReaderModel }) {
         model.barMode.value = 'audio'
         void requestPersistence()
       }
-    } catch {
-      setNotice('Не вдалося зберегти файли: на пристрої замало місця для цього сайту.')
+    } catch (error) {
+      setNotice(isQuotaError(error)
+        ? 'Не вдалося зберегти файли: на пристрої замало місця для цього сайту.'
+        : `Не вдалося зберегти файли: ${storageErrorText(error)}`)
     } finally {
       setAdding(false)
     }

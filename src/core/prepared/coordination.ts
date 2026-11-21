@@ -33,6 +33,15 @@ export async function withImportLock<T>(work: () => Promise<T>): Promise<T> {
   return manager.request(IMPORT_LOCK, { mode: 'exclusive' }, work)
 }
 
+/**
+ * Runs a write of audio files under the same lock, so the cleanup of another tab that starts meanwhile does not take
+ * the files written so far for leftovers (audit 2026-11-20). Without Web Locks the write runs as before.
+ */
+export async function withAudioWriteLock<T>(work: () => Promise<T>): Promise<T> {
+  const manager = locks()
+  return manager ? manager.request(IMPORT_LOCK, { mode: 'exclusive' }, work) : work()
+}
+
 /** At start: finish what crashed imports left, then remove leftovers of books not stored — under the lock. */
 export async function cleanupAtStart(): Promise<void> {
   const run = async () => {

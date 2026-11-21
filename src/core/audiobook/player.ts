@@ -2,6 +2,7 @@
 // seeking, speed, the listening place and lock-screen controls.
 import { batch, signal } from '@preact/signals'
 import { setMediaPlaybackState, setMediaPosition, setMediaSessionHandlers } from '../speech/audio.ts'
+import { withAudioWriteLock } from '../prepared/coordination.ts'
 import {
   addTracks, deleteAudio, deleteTrackFile, listTracks, loadAudioPosition, saveAudioPosition, setTracks, trackFile,
   type AudioTrack,
@@ -228,8 +229,9 @@ export class AudiobookPlayer {
   }
 
   /** Opens another track at its start (or at `time`); keeps playing if it was playing. */
-  async selectTrack(index: number, time = 0) {
-    if (index < 0 || index >= this.tracks.value.length) return
+  /** Resolves to whether the track is ready to play. */
+  async selectTrack(index: number, time = 0): Promise<boolean> {
+    if (index < 0 || index >= this.tracks.value.length) return false
     const playing = this.isPlaying
     this.element?.pause()
     this.pausedAt = null
@@ -238,6 +240,7 @@ export class AudiobookPlayer {
     void this.savePosition()
     if (ready && playing) this.start()
     else if (playing) this.state.value = 'paused'
+    return ready
   }
 
   setRate(rate: number) {
@@ -251,7 +254,7 @@ export class AudiobookPlayer {
 
   async add(files: File[]): Promise<number> {
     const before = this.tracks.value.length
-    const tracks = await addTracks(this.bookID, files, this.tracks.value)
+    const tracks = await withAudioWriteLock(() => addTracks(this.bookID, files, this.tracks.value))
     this.tracks.value = tracks
     if (before === 0 && tracks.length) await this.prepare(0, 0)
     return tracks.length - before
@@ -367,8 +370,12 @@ export class AudiobookPlayer {
   private readonly onEnded = () => {
     if (!this.ownsElement) return
     if (this.track.value + 1 < this.tracks.value.length) {
-      void this.selectTrack(this.track.value + 1).then(() => {
-        if (this.state.value !== 'playing') this.start()
+      void this.selectTrack(this.track.value + 1).then((ready) => {
+        // A missing next file stops here with its message instead of replaying the track that ended.
+        if (!ready) {
+          this.state.value = 'paused'
+          setMediaPlaybackState('paused')
+        } else if (this.state.value !== 'playing') this.start()
       })
       return
     }
