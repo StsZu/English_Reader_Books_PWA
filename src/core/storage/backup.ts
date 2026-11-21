@@ -21,6 +21,8 @@ export const backupErrors = {
   damaged: 'Файл копії пошкоджений або неповний.',
   tooLarge: 'Копія завелика для відновлення на цьому пристрої.',
   otherApp: (name: string) => `Це копія ${name}. Відновіть її в ${name}.`,
+  tooLargeToSave: 'Даних забагато для однієї копії: її не вдасться відновити (межа 200 МБ).',
+  unrestorable: 'Копію не створено: частина даних на цьому пристрої пошкоджена, і таку копію не вдасться відновити.',
 }
 
 export class BackupError extends Error {}
@@ -76,8 +78,8 @@ async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array[]
   }
 }
 
-/** Reads every store in one transaction (a consistent snapshot) and returns the gzip file. */
-export async function createBackup(now = new Date()): Promise<Blob> {
+/** Reads every store in one transaction (a consistent snapshot) and returns the gzip file, once it is known to restore. */
+export async function createBackup(now = new Date(), limit = maxBackupSize): Promise<Blob> {
   const tx = (await db()).transaction([...STORES], 'readonly')
   const records: BackupRecord[] = []
   for (const store of STORES) {
@@ -96,8 +98,16 @@ export async function createBackup(now = new Date()): Promise<Blob> {
     JSON.stringify({ end: { books: records.filter((r) => r.store === 'books').length, records: records.length } }),
   ]
   const text = new Blob(lines.map((line) => line + '\n'))
+  if (text.size > limit) throw new BackupError(backupErrors.tooLargeToSave)
   const chunks = await collect(text.stream().pipeThrough(new CompressionStream('gzip')))
-  return new Blob(chunks as BlobPart[], { type: 'application/gzip' })
+  const file = new Blob(chunks as BlobPart[], { type: 'application/gzip' })
+  // The file is read back the way a restore reads it, so a backup that could not be restored is never offered.
+  try {
+    await readBackup(file, limit)
+  } catch {
+    throw new BackupError(backupErrors.unrestorable)
+  }
+  return file
 }
 
 // MARK: - Reading
@@ -107,26 +117,55 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 const isString = (value: unknown): value is string => typeof value === 'string'
 
+const isInteger = (value: unknown): boolean => Number.isInteger(value)
+
+const optional = (value: unknown, check: (value: unknown) => boolean): boolean => value === undefined || check(value)
+
+const isFormat = (value: unknown): boolean => value === 'epub' || value === 'txt' || value === 'md'
+
 const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every(isString)
 
 const isRef = (value: unknown): boolean =>
   isObject(value) && Number.isInteger(value.chapter) && Number.isInteger(value.paragraph)
 
-const isPlace = (value: unknown): boolean => isObject(value) && isString(value.bookID) && isRef(value)
+const isPlace = (value: unknown): boolean =>
+  isObject(value) && isString(value.bookID) && isString(value.bookTitle) && isRef(value) && isInteger(value.sentence)
 
+const isMark = (value: unknown): boolean => isObject(value) && isInteger(value.sentence) && isInteger(value.start)
+  && isInteger(value.end) && (value.style === 'italic' || value.style === 'bold')
+
+const isContentsEntry = (value: unknown): boolean => isObject(value) && isString(value.title) && isInteger(value.level)
+  && isInteger(value.chapter) && isInteger(value.paragraph)
+
+const isParagraph = (value: unknown): boolean => isObject(value) && (value.kind === 'text' || value.kind === 'heading')
+  && isStringArray(value.sentences) && optional(value.marks, (m) => Array.isArray(m) && m.every(isMark))
+
+/** Every field the library, the reader and the contents read from a stored book (src/core/model/book.ts). */
 const isBook = (value: unknown): boolean =>
-  isObject(value) && isString(value.id) && isString(value.title) && Array.isArray(value.chapters)
-  && value.chapters.every((c) => isObject(c) && isString(c.title) && Array.isArray(c.paragraphs)
-    && c.paragraphs.every((p) => isObject(p) && (p.kind === 'text' || p.kind === 'heading') && isStringArray(p.sentences)))
+  isObject(value) && isString(value.id) && isString(value.title) && isString(value.author) && isFormat(value.format)
+  && isString(value.importedAt) && Array.isArray(value.chapters)
+  && value.chapters.every((c) => isObject(c) && isString(c.title) && Array.isArray(c.paragraphs) && c.paragraphs.every(isParagraph))
+  && optional(value.contents, (c) => Array.isArray(c) && c.every(isContentsEntry))
+  && optional(value.source, isObject)
 
 const isIndex = (value: unknown): boolean =>
-  Array.isArray(value) && value.every((b) => isObject(b) && isString(b.id) && isString(b.title))
+  Array.isArray(value) && value.every((b) => isObject(b) && isString(b.id) && isString(b.title) && isString(b.author)
+    && isFormat(b.format) && isString(b.importedAt) && optional(b.openedAt, isString)
+    && isInteger(b.chapterCount) && isInteger(b.sentenceCount))
+
+const isContext = (value: unknown): boolean =>
+  isObject(value) && isString(value.sentence) && isString(value.translation) && isString(value.date) && isPlace(value.place)
+
+/** Every field the saved lists, the card and training read; training fields may be missing (decodeWord). */
+const isWord = (w: unknown): boolean =>
+  isObject(w) && ['id', 'headword', 'lemma', 'ipa', 'partOfSpeech', 'level', 'forms', 'contextTranslation', 'updatedAt'].every((f) => isString(w[f]))
+  && optional(w.otherTranslations, isStringArray) && optional(w.contexts, (c) => Array.isArray(c) && c.every(isContext))
+
+const isQuote = (q: unknown): boolean => isObject(q) && isString(q.id) && isString(q.text) && isString(q.translation)
+  && isString(q.date) && isPlace(q.place) && optional(q.apple, (a) => typeof a === 'boolean')
 
 const isSaved = (value: unknown): boolean =>
-  isObject(value)
-  && Array.isArray(value.words) && value.words.every((w) => isObject(w) && isString(w.id) && isString(w.lemma)
-    && (w.contexts === undefined || (Array.isArray(w.contexts) && w.contexts.every((c) => isObject(c) && isPlace(c.place)))))
-  && Array.isArray(value.quotes) && value.quotes.every((q) => isObject(q) && isString(q.id) && isString(q.text) && isPlace(q.place))
+  isObject(value) && Array.isArray(value.words) && value.words.every(isWord) && Array.isArray(value.quotes) && value.quotes.every(isQuote)
 
 /** The same shapes the app reads at start (library index, saved lists, ParagraphRef, word cards). */
 const validators: Record<StoreName, (key: string, value: unknown) => boolean> = {

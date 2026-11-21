@@ -207,6 +207,56 @@ describe('перевірка копії: своя помилка, база бе�
   })
 })
 
+describe('перевірка копії: усі поля, які читає застосунок (аудит 2026-11-20)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a JSON record edited field by field
+  type Json = any
+  const recordLine = (lines: string[], store: string, key: string) => lines.findIndex((l) => {
+    const item = JSON.parse(l) as { store?: string; key?: string }
+    return item.store === store && item.key === key
+  })
+  const change = (lines: string[], index: number, edit: (value: Json) => void) => lines.map((line, i) => {
+    if (i !== index) return line
+    const item = JSON.parse(line)
+    edit(item.value)
+    return JSON.stringify(item)
+  })
+
+  it('без автора, формату, назви книжки в місці, перекладу цитати чи речення контексту — копія пошкоджена', async () => {
+    const id = await fillDevice()
+    const lines = await backupLines()
+    const library = recordLine(lines, 'meta', 'library')
+    const bookLine = recordLine(lines, 'books', id)
+    const saved = recordLine(lines, 'meta', 'saved')
+    const broken: [number, (value: Json) => void][] = [
+      [library, (v) => { delete v[0].author }],
+      [library, (v) => { v[0].sentenceCount = 'many' }],
+      [bookLine, (v) => { v.format = 'pdf' }],
+      [bookLine, (v) => { v.chapters[0].paragraphs[0].marks = [{ sentence: 0, start: 0, end: 2, style: 'underline' }] }],
+      [bookLine, (v) => { v.contents = [{ title: 'C', chapter: 0, paragraph: 0 }] }],
+      [saved, (v) => { delete v.words[0].headword }],
+      [saved, (v) => { delete v.words[0].contexts[0].sentence }],
+      [saved, (v) => { delete v.quotes[0].translation }],
+      [saved, (v) => { delete v.quotes[0].place.bookTitle }],
+    ]
+    for (const [index, edit] of broken) {
+      await expect(readBackup(await fileOf(change(lines, index, edit)))).rejects.toThrow(backupErrors.damaged)
+    }
+    // Fields the app may lack (older records): still a good backup.
+    const older = change(lines, saved, (v) => {
+      for (const f of ['otherTranslations', 'trainingLevel', 'nextReview', 'lastTrained', 'lastResultUnknown']) delete v.words[0][f]
+      delete v.quotes[0].apple
+    })
+    await expect(readBackup(await fileOf(older))).resolves.toMatchObject({ words: 1, quotes: 1 })
+  })
+
+  it('копія, яку не вдасться відновити, не створюється: пошкоджений запис або понад межу', async () => {
+    await fillDevice()
+    await expect(createBackup(new Date(), 100)).rejects.toThrow(backupErrors.tooLargeToSave)
+    await setValue('meta', 'saved', { words: [{ id: 'W2', lemma: 'two' }], quotes: [] })
+    await expect(createBackup()).rejects.toThrow(backupErrors.unrestorable)
+  })
+})
+
 describe('відновлення', () => {
   it('збій посередині транзакції: у базі те, що було', async () => {
     await fillDevice()
