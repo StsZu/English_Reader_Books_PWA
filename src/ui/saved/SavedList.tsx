@@ -256,6 +256,14 @@ function SwipeRow({ children, onDelete }: { children: ComponentChildren; onDelet
       setOffset(-current > ACTION_WIDTH / 2 ? -ACTION_WIDTH : 0)
     }
   }
+  /** The system took the gesture (scroll, call, another touch): the row goes back and nothing is deleted. */
+  const onPointerCancel = () => {
+    const state = drag.current
+    drag.current = null
+    if (!state || !state.horizontal) return
+    setDragging(false)
+    setOffset(state.base)
+  }
   const onClickCapture = (event: MouseEvent) => {
     if (suppressClick.current) {
       suppressClick.current = false
@@ -289,7 +297,7 @@ function SwipeRow({ children, onDelete }: { children: ComponentChildren; onDelet
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onClickCapture={onClickCapture}
       >
         {children}

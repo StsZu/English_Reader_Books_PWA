@@ -87,6 +87,15 @@ test('збережені слова й цитати: картка, фрагме�
   await page.waitForTimeout(500)
 
   const box = (await libraryWord.boundingBox())!
+  // A swipe the system cancels (scroll, call) puts the row back and deletes nothing, however far it went.
+  await page.mouse.move(box.x + box.width - 20, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 20, box.y + box.height / 2, { steps: 10 })
+  await page.locator('.swipe-content').first().dispatchEvent('pointercancel', { pointerId: 1, bubbles: true })
+  await page.mouse.up()
+  await expect(libraryWord).toBeVisible()
+  await expect(page.locator('.swipe-content').first()).toHaveAttribute('style', /translateX\(0px\)/)
+
   await page.mouse.move(box.x + box.width - 20, box.y + box.height / 2)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width - 140, box.y + box.height / 2, { steps: 10 })

@@ -25,6 +25,7 @@ export function AudioSheet({ model }: { model: ReaderModel }) {
   const [adding, setAdding] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmRemoveAll, setConfirmRemoveAll] = useState(false)
+  const [confirmRemoveTrack, setConfirmRemoveTrack] = useState<number | null>(null)
   const [free, setFree] = useState<number | null>(null)
 
   useEffect(() => {
@@ -82,7 +83,7 @@ export function AudioSheet({ model }: { model: ReaderModel }) {
                 <IconButton icon="chevron.down" label={`Нижче: ${track.name}`} disabled={index === tracks.length - 1}
                   onClick={() => void player.move(index, index + 1)} testID={`moveTrackDown-${index}`} />
                 <IconButton icon="trash" label={`Видалити: ${track.name}`} tone="destructive"
-                  onClick={() => void player.remove(index)} testID={`removeTrack-${index}`} />
+                  onClick={() => setConfirmRemoveTrack(index)} testID={`removeTrack-${index}`} />
               </li>
             ))}
           </ol>
@@ -105,6 +106,16 @@ export function AudioSheet({ model }: { model: ReaderModel }) {
         {model.book.source && <SourceInfo source={model.book.source} />}
         <input ref={input} type="file" multiple accept={AUDIO_ACCEPT} class="library-input" onChange={(e) => void onFiles(e)} data-testid="audioInput" />
       </div>
+      <ConfirmDialog open={confirmRemoveTrack !== null} style="actionSheet"
+        title={`Видалити доріжку «${tracks[confirmRemoveTrack ?? -1]?.name ?? ''}»?`}
+        message={model.sync.value ? 'Підсвічування речень цієї доріжки повернеться лише після нового імпорту книжки.' : undefined}
+        actions={[
+          { label: 'Видалити', role: 'destructive', testID: 'confirmRemoveTrack', onSelect: () => {
+            if (confirmRemoveTrack !== null) void player.remove(confirmRemoveTrack)
+          } },
+          { label: 'Скасувати', role: 'cancel' },
+        ]}
+        onClose={() => setConfirmRemoveTrack(null)} testID="removeTrackDialog" />
       <ConfirmDialog open={confirmRemoveAll} style="actionSheet" title="Видалити всі аудіофайли цієї книжки?"
         actions={[
           { label: 'Видалити', role: 'destructive', testID: 'confirmRemoveAudio', onSelect: () => {
