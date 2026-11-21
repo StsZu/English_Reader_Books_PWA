@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import * as prompts from '../../../src/core/ai/prompts.ts'
 import { importBook } from '../../../src/core/import/importer.ts'
 import { isChapterHeading } from '../../../src/core/import/text.ts'
-import { sentences, words } from '../../../src/core/model/segmenter.ts'
+import { makeBook, sentences, words } from '../../../src/core/model/segmenter.ts'
 import { bestVoice } from '../../../src/core/speech/system-speech.ts'
 import { allDictionaries, defaultExplanationTemplate } from '../../../src/core/storage/settings.ts'
 import { dictionaryURL } from '../../../src/ui/word/dictionaries.ts'
@@ -92,6 +92,23 @@ describe('Polish Reader: segmentation', () => {
     expect(sentences('— Skąd jesteście? — Jestem Polak.')).toEqual(['— Skąd jesteście?', '— Jestem Polak.'])
     expect(sentences('— Tułałem się — odpowiedział.')).toEqual(['— Tułałem się — odpowiedział.'])
     expect(sentences('Mieszkam w domu nr. 7 przy rynku.')).toEqual(['Mieszkam w domu nr. 7 przy rynku.'])
+  })
+
+  it('аудит 2026-11-20, вада 10: лапки перед скороченням, «im.», діалог з дефісом, «…» після «?» і «!»', () => {
+    expect(sentences('„Prof. Nowak przyszedł” — powiedział.')).toEqual(['„Prof. Nowak przyszedł” — powiedział.'])
+    expect(sentences('«Prof. Nowak» wszedł. Było późno.')).toEqual(['«Prof. Nowak» wszedł.', 'Było późno.'])
+    expect(sentences('Dał to im. Potem wyszedł z domu.')).toEqual(['Dał to im.', 'Potem wyszedł z domu.'])
+    expect(sentences('Szkoła im. Jana Pawła II jest duża.')).toEqual(['Szkoła im. Jana Pawła II jest duża.'])
+    expect(sentences('- Dobrze. - Jan wstał.')).toEqual(['- Dobrze.', '- Jan wstał.'])
+    expect(sentences('- Dobrze - odpowiedział.')).toEqual(['- Dobrze - odpowiedział.'])
+    expect(sentences('To jest wasze nazwisko?… Hm!… Dwie chorągwie.')).toEqual(['To jest wasze nazwisko?…', 'Hm!…', 'Dwie chorągwie.'])
+    expect(sentences('Co?… nic.')).toEqual(['Co?… nic.'])
+    const book = makeBook({ title: 'T', author: '', chapters: [{ title: '1', blocks: [
+      { kind: 'text', text: 'Co?… nic. Potem.', marks: [{ start: 5, end: 8, style: 'italic' }] },
+    ] }] }, 'md')
+    expect(book.chapters[0].paragraphs[0]).toMatchObject({
+      sentences: ['Co?… nic.', 'Potem.'], marks: [{ sentence: 0, start: 5, end: 8, style: 'italic' }],
+    })
   })
 
   it('слова з польськими літерами — цілі', () => {

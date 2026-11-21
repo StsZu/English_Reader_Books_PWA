@@ -28,6 +28,9 @@ export const abbreviations = [
   'e.g', 'i.e', 'mt', 'messrs', 'mme', 'mlle', 'sgt', 'cpl', 'gov', 'hon', 'esq',
 ]
 
+/** Abbreviations that are also ordinary words, glued only after a capitalized word: none in English. */
+export const nameAbbreviations: string[] = []
+
 /** Abbreviations glued only before a number ("No. 7"), since "No." is also a whole reply. */
 export const numberAbbreviations = ['no', 'nos', 'vol', 'p', 'pp', 'ch', 'fig']
 

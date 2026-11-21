@@ -2,8 +2,8 @@
 // ICU breaks after abbreviations that continue the sentence (src/core/language.ts), so those are glued back.
 import type { Book, BookFormat, Chapter, ContentsEntry, Paragraph, RawBlock, RawBook, TextMark } from './book.ts'
 import {
-  abbreviations as abbreviationList, capitalLetterWords, dialogueDashStartsSentence, numberAbbreviations as numberAbbreviationList,
-  sourceLanguage,
+  abbreviations as abbreviationList, capitalLetterWords, dialogueDashStartsSentence, nameAbbreviations as nameAbbreviationList,
+  numberAbbreviations as numberAbbreviationList, sourceLanguage,
 } from '../language.ts'
 
 export interface WordRange {
@@ -23,52 +23,94 @@ const numberAbbreviations = new Set(numberAbbreviationList)
 
 const capitalWords = new Set(capitalLetterWords)
 
+/** Abbreviations that are also words, glued only after a capitalized word («Szkoła im. Jana»). */
+const nameAbbreviations = new Set(nameAbbreviationList)
+
 /**
  * Whether the next sentence continues this one: it ends with an abbreviation, a single-letter
  * initial ("A.", not the English word "I."), or a number abbreviation followed by a number.
+ * The abbreviation may follow an opening quote or bracket («„Prof. Nowak”», "[Mr. Smith").
  */
 export function gluesToNext(sentence: string, next: string): boolean {
-  const match = /(?:^|[\s("'“‘—–-])((?:\p{L}\.)*\p{L}+)\.$/u.exec(sentence)
+  const match = /(?:^|[\s("'“‘„«»‹›‚[—–-])((?:\p{L}\.)*\p{L}+)\.$/u.exec(sentence)
   if (!match) return false
   const token = match[1]
   if (/^\p{Lu}$/u.test(token)) return !capitalWords.has(token)
   const lower = token.toLowerCase()
   if (numberAbbreviations.has(lower)) return /^\p{N}/u.test(next)
+  if (nameAbbreviations.has(lower)) return /(?:^|\s)\p{Lu}\p{L}*\s+$/u.test(sentence.slice(0, match.index + match[0].length - token.length - 1))
   return abbreviations.has(lower)
+}
+
+/** Breaks before a dialogue dash after the end of a sentence: «— Skąd? — Jestem.», «- Dobrze. - Jan wstał.». */
+const dialogueBreak = /(?<=[.?!…])\s+(?=(?:[—–]\s*|-\s+)\p{Lu})/gu
+
+/** Closing marks that ICU puts at the start of the next piece («Co?… nic.» → «Co?» / «… nic.»). */
+const leadingClose = /^[…!?.]+/u
+
+interface Span {
+  start: number
+  end: number
+}
+
+/** The span without surrounding spaces. */
+function trimmed(text: string, span: Span): Span {
+  let { start, end } = span
+  while (start < end && /\s/u.test(text[start])) start++
+  while (end > start && /\s/u.test(text[end - 1])) end--
+  return { start, end }
 }
 
 /**
  * Splits a paragraph into trimmed sentences. Very long sentences stay whole:
  * translation and speech both work per sentence, so only splitting at real
  * boundaries keeps the Ukrainian line aligned with its source.
+ * Every sentence is a piece of the normalized text, so glued pieces keep the spaces (or their absence) between them.
  */
 export function sentences(text: string): string[] {
   const cleaned = normalizeWhitespace(text)
   if (!cleaned) return []
-  const result: string[] = []
   // ICU does not break before a dialogue dash («…jesteście? — Jestem Polak.»); where the dash starts a reply
   // (language.ts), a new sentence starts there when the dash is followed by a capital letter.
   // A lower-case attribution («— spytał.») stays glued below.
-  const segments = [...sentenceSegmenter.segment(cleaned)].map(({ segment }) => segment)
-  const pieces = dialogueDashStartsSentence
-    ? segments.flatMap((segment) => segment.split(/(?<=[.?!…])\s+(?=[—–]\s*\p{Lu})/u))
-    : segments
-  for (const segment of pieces) {
-    const sentence = segment.trim()
-    if (!sentence) continue
-    const glue = result.length > 0 && gluesToNext(result[result.length - 1], sentence)
+  const pieces: Span[] = []
+  for (const { segment, index } of sentenceSegmenter.segment(cleaned)) {
+    let from = 0
+    if (dialogueDashStartsSentence) {
+      for (const dash of segment.matchAll(dialogueBreak)) {
+        pieces.push({ start: index + from, end: index + dash.index })
+        from = dash.index
+      }
+    }
+    pieces.push({ start: index + from, end: index + segment.length })
+  }
+  const result: Span[] = []
+  for (const piece of pieces) {
+    const last = result[result.length - 1]
+    const span = trimmed(cleaned, piece)
+    const end = span.end
+    let start = span.start
+    // «…» or «!» right after the previous sentence, with no space, closes that sentence.
+    const close = last && start === last.end ? leadingClose.exec(cleaned.slice(start, end)) : null
+    if (close) {
+      last.end = start + close[0].length
+      start = trimmed(cleaned, { start: last.end, end }).start
+    }
+    if (start >= end) continue
+    const sentence = cleaned.slice(start, end)
+    const glue = last !== undefined && gluesToNext(cleaned.slice(last.start, last.end), sentence)
     const firstLetter = sentence.match(/\p{L}/u)?.[0]
     const startsLowercase = !!firstLetter && firstLetter !== firstLetter.toUpperCase()
       && firstLetter === firstLetter.toLowerCase() && !/^\p{N}/u.test(sentence)
     // Glue fragments without letters (a lone "—"), dialogue attributions that start in lower case
     // ("Is it you?" he asked.) and text after an abbreviation ("Mr. Holmes") to the previous sentence.
-    if (result.length > 0 && (glue || !hasLetter(sentence) || startsLowercase)) {
-      result[result.length - 1] = result[result.length - 1] + ' ' + sentence
+    if (last && (glue || !hasLetter(sentence) || startsLowercase)) {
+      last.end = end
     } else {
-      result.push(sentence)
+      result.push({ start, end })
     }
   }
-  return result.length === 0 ? [cleaned] : result
+  return result.length === 0 ? [cleaned] : result.map(({ start, end }) => cleaned.slice(start, end))
 }
 
 /** Word ranges (UTF-16 offsets) used to make each word tappable; only tokens with letters. */

@@ -17,6 +17,11 @@ describe('TextSegmenter', () => {
       .toEqual(['He lived at No. 7 Baker Street.', '"No."', 'She left.'])
   })
 
+  it('«…» одразу після «?» лишається в реченні; скорочення після дужки (аудит 2026-11-20)', () => {
+    expect(sentences('What?… No. Then he left.')).toEqual(['What?…', 'No.', 'Then he left.'])
+    expect(sentences('He said [Mr. Smith came] and left.')).toEqual(['He said [Mr. Smith came] and left.'])
+  })
+
   it('приклеює фрагменти без літер до попереднього речення', () => {
     expect(sentences('He stopped. — . Then went on.')).toEqual(['He stopped. — .', 'Then went on.'])
   })

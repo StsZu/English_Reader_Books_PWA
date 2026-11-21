@@ -27,9 +27,15 @@ export const sourceLanguageName = {
  * Abbreviations that usually end a sentence (itd., itp., r., w.) are left out on purpose.
  */
 export const abbreviations = [
-  'św', 'ul', 'al', 'pl', 'dr', 'prof', 'mgr', 'inż', 'ks', 'gen', 'płk', 'kpt', 'por', 'hr', 'im', 'tzw',
+  'św', 'ul', 'al', 'pl', 'dr', 'prof', 'mgr', 'inż', 'ks', 'gen', 'płk', 'kpt', 'por', 'hr', 'tzw',
   'np', 'm.in', 'tj', 'tzn', 'ok', 'wg', 'zob', 'mr', 'mrs', 'st',
 ]
+
+/**
+ * Abbreviations that are also ordinary words, glued only after a capitalized word: «Szkoła im. Jana», «Teatr im.
+ * Słowackiego» (imienia), but «Dał to im. Potem…» (the pronoun) ends the sentence.
+ */
+export const nameAbbreviations = ['im']
 
 /** Abbreviations glued only before a number («nr 7», «s. 12»). */
 export const numberAbbreviations = ['nr', 's', 'str', 'poz', 'rozdz', 't', 'vol', 'no', 'p']
