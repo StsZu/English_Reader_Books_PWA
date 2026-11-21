@@ -104,6 +104,10 @@ function makeSignals(): SettingsSignals {
 export const settings = makeSignals()
 
 /** Translation font size: base size × scale, clamped to 10–40. */
+/** Models used in requests: an empty field means the default, never `model: ""` (audit 2026-11-20). */
+export const textModelName = (): string => settings.textModel.value.trim() || defaults.textModel
+export const ttsModelName = (): string => settings.ttsModel.value.trim() || defaults.ttsModel
+
 export const parallelTranslationFontSize = computed(() =>
   Math.min(40, Math.max(10, settings.fontSize.value * settings.parallelTranslationScale.value)))
 

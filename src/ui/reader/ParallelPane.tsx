@@ -126,18 +126,18 @@ export function ParallelPane({ model, openSettings }: { model: ReaderModel; open
     const notice = model.translationNotice.value
     const state = model.translationState(active.paragraph)
     let body: ComponentChildren
-    if (notice) {
-      body = (
-        <>
-          <ScrollableText text={notice} testID="noticeText" />
-          <Button variant="plain" size="small" onClick={openSettings} testID="openSettingsFromPane">Налаштування</Button>
-        </>
-      )
-    } else if (state?.kind === 'done' && active.sentence < state.lines.length) {
+    if (state?.kind === 'done' && active.sentence < state.lines.length) {
       body = (
         <>
           <ScrollableText text={state.lines[active.sentence]} testID={`translation-${paragraphKey(active.paragraph)}-${active.sentence}`} />
           <SentenceControls model={model} sentenceRef={active} />
+        </>
+      )
+    } else if (notice) {
+      body = (
+        <>
+          <ScrollableText text={notice} testID="noticeText" />
+          <Button variant="plain" size="small" onClick={openSettings} testID="openSettingsFromPane">Налаштування</Button>
         </>
       )
     } else if (state?.kind === 'failed') {

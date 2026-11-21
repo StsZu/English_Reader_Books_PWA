@@ -3,7 +3,7 @@
 import { signal } from '@preact/signals'
 import { isAbort } from '../../contracts.ts'
 import { testFlags } from '../../app/test-mode.ts'
-import { settings } from '../../core/storage/settings.ts'
+import { settings, ttsModelName } from '../../core/storage/settings.ts'
 import { currentVoiceEngine, fallbackNotice } from '../../core/speech/engines.ts'
 import { OpenAISpeechEngine } from '../../core/speech/openai-speech.ts'
 import { SystemSpeechEngine } from '../../core/speech/system-speech.ts'
@@ -22,7 +22,7 @@ export class TrainingAudio {
   configure() {
     this.useAI = currentVoiceEngine() === 'openAI'
     this.ai.voice = settings.openAIVoice.value
-    this.ai.model = settings.ttsModel.value
+    this.ai.model = ttsModelName()
     this.ai.rate = settings.speechRate.value
     this.system.rate = Math.min(1, settings.speechRate.value) * 0.8
   }

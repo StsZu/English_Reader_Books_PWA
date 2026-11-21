@@ -3,12 +3,13 @@
 // The Apple fallback tests are not ported: the PWA has no on-device translation (V-01).
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AIError, abortError, type TranslationProvider } from '../../src/contracts.ts'
+import { TranslationStore } from '../../src/core/ai/translation.ts'
 import type { Book, ParagraphRef, SentenceRef } from '../../src/core/model/book.ts'
 import { setAudioBackend, type AudioBackend } from '../../src/core/speech/audio.ts'
 import { OpenAISpeechEngine, silentWAV } from '../../src/core/speech/openai-speech.ts'
 import { WordLookupService } from '../../src/core/ai/word.ts'
 import { quotes, removeAllForTests, words } from '../../src/core/saved/saved.ts'
-import { resetAllSettings, settings } from '../../src/core/storage/settings.ts'
+import { resetAllSettings, settings, textModelName, ttsModelName } from '../../src/core/storage/settings.ts'
 import { FRAGMENT_LIMIT, ReaderModel, speechKeyID } from '../../src/ui/reader/model.ts'
 
 // MARK: - Fakes
@@ -195,6 +196,27 @@ describe('паралельний переклад', () => {
     await waitUntil(() => model.translationNotice.value !== null, 'notice')
     expect(model.translationNotice.value).toContain('Не вказано ключ OpenAI')
     expect(model.translationState(p0)).toBeUndefined()
+  })
+
+  it('попередження про ключ не ховає збережених перекладів; порожня модель — типова (аудит 2026-11-20)', async () => {
+    const book = translationTestBook()
+    await new TranslationStore(book.id).save(['Збережений переклад.'], p1)
+    const provider = new ScriptedProvider(new AIError({ kind: 'missingKey' }), 'ШІ')
+    const model = new ReaderModel(book, { provider: () => provider })
+    model.handleWordTap('First', ref(p0, 0))
+    await waitUntil(() => model.translationNotice.value !== null, 'notice')
+    model.handleWordTap('Second', ref(p1, 0))
+    await waitForTranslation(model, p1)
+    expect(model.isTranslationShown(ref(p1, 0))).toBe(true)
+    expect(provider.calls).toBe(1)
+
+    settings.textModel.value = '  '
+    settings.ttsModel.value = ''
+    expect(textModelName()).toBe('gpt-5.4-mini')
+    expect(ttsModelName()).toBe('gpt-4o-mini-tts')
+    settings.textModel.value = 'gpt-x'
+    expect(textModelName()).toBe('gpt-x')
+    resetAllSettings()
   })
 
   it('інші помилки дають «Повторити» в абзаці', async () => {

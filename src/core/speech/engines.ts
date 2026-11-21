@@ -2,7 +2,7 @@
 import { errorMessage, isAbort, type SpeechEngine, type VoiceEngineKind } from '../../contracts.ts'
 import { sampleText } from '../language.ts'
 import { testFlags } from '../../app/test-mode.ts'
-import { settings } from '../storage/settings.ts'
+import { settings, ttsModelName } from '../storage/settings.ts'
 import { OpenAISpeechEngine } from './openai-speech.ts'
 import { SystemSpeechEngine } from './system-speech.ts'
 
@@ -14,12 +14,12 @@ export function currentVoiceEngine(): VoiceEngineKind {
 /** Engine for reading the book and sentences aloud, with the current voice, model and rate. */
 export function makeEngine(kind: VoiceEngineKind = currentVoiceEngine()): SpeechEngine {
   return kind === 'openAI'
-    ? new OpenAISpeechEngine(settings.openAIVoice.value, settings.ttsModel.value, settings.speechRate.value)
+    ? new OpenAISpeechEngine(settings.openAIVoice.value, ttsModelName(), settings.speechRate.value)
     : new SystemSpeechEngine(settings.speechRate.value)
 }
 
 export const makeOpenAIEngine = (rate = settings.speechRate.value) =>
-  new OpenAISpeechEngine(settings.openAIVoice.value, settings.ttsModel.value, rate)
+  new OpenAISpeechEngine(settings.openAIVoice.value, ttsModelName(), rate)
 
 /** Explanation shown when the AI voice fails and the system voice speaks instead. */
 export const fallbackNotice = (error: unknown): string =>
@@ -39,9 +39,9 @@ export async function pronounceWord(text: string): Promise<PronounceResult> {
   stopPronunciation()
   let fallbackReason: string | undefined
   if (currentVoiceEngine() === 'openAI') {
-    wordSpeakerAI ??= new OpenAISpeechEngine(settings.openAIVoice.value, settings.ttsModel.value, 0.9)
+    wordSpeakerAI ??= new OpenAISpeechEngine(settings.openAIVoice.value, ttsModelName(), 0.9)
     wordSpeakerAI.voice = settings.openAIVoice.value
-    wordSpeakerAI.model = settings.ttsModel.value
+    wordSpeakerAI.model = ttsModelName()
     try {
       await wordSpeakerAI.speak(text, () => {})
       return {}

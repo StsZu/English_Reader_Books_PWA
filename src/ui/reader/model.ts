@@ -20,7 +20,7 @@ import { buildSyncIndex, sentenceAt, type SyncIndex } from '../../core/prepared/
 import { unlockAudio } from '../../core/speech/audio.ts'
 import { loadPosition, savePosition } from '../../core/storage/positions.ts'
 import { isQuotaError, saveQuietly, storageError, storageErrorText } from '../../core/storage/db.ts'
-import { settings } from '../../core/storage/settings.ts'
+import { settings, textModelName, ttsModelName } from '../../core/storage/settings.ts'
 import {
   isSaved, pendingSentence, quoteFor, removeQuote, removeWordByLemma, saveQuote, saveWord, setPendingSentence,
   type SavedPlace,
@@ -134,9 +134,9 @@ export class ReaderModel {
 
   constructor(readonly book: Book, options: { provider?: () => TranslationProvider; sentenceSpeaker?: OpenAISpeechEngine } = {}) {
     this.store = new TranslationStore(book.id)
-    this.provider = options.provider ?? (() => makeTranslationProvider(settings.textModel.value))
+    this.provider = options.provider ?? (() => makeTranslationProvider(textModelName()))
     this.sentenceSpeakerAI = options.sentenceSpeaker
-      ?? new OpenAISpeechEngine(settings.openAIVoice.value, settings.ttsModel.value, settings.speechRate.value)
+      ?? new OpenAISpeechEngine(settings.openAIVoice.value, ttsModelName(), settings.speechRate.value)
     this.reading = new ReadingController(book)
     this.audiobook = new AudiobookPlayer(book.id, book.title)
     this.audiobook.onWillPlay = () => {
@@ -422,7 +422,7 @@ export class ReaderModel {
 
   /** True when the translation of this sentence is currently shown in the top panel. */
   isTranslationShown(ref: SentenceRef): boolean {
-    if (!settings.showTranslation.value || !sameSentence(this.activeSentence.value, ref) || this.translationNotice.value) return false
+    if (!settings.showTranslation.value || !sameSentence(this.activeSentence.value, ref)) return false
     const state = this.translations.value.get(paragraphKey(ref.paragraph))
     return state?.kind === 'done' && ref.sentence < state.lines.length
   }
@@ -439,7 +439,8 @@ export class ReaderModel {
   }
 
   requestTranslation(ref: ParagraphRef) {
-    if (!settings.showTranslation.value || this.translationNotice.value || this.translationState(ref)) return
+    // With the key notice shown, saved translations still come from the cache; translate() sends no request then.
+    if (!settings.showTranslation.value || this.translationState(ref)) return
     this.setTranslation(ref, { kind: 'loading' })
     this.pending.push(ref)
     this.pump()
@@ -700,7 +701,7 @@ export class ReaderModel {
 
   private configureSentenceSpeaker() {
     this.sentenceSpeakerAI.voice = settings.openAIVoice.value
-    this.sentenceSpeakerAI.model = settings.ttsModel.value
+    this.sentenceSpeakerAI.model = ttsModelName()
     this.sentenceSpeakerAI.rate = settings.speechRate.value
     if (this.sentenceSpeakerSystem) this.sentenceSpeakerSystem.rate = settings.speechRate.value
   }
@@ -785,7 +786,7 @@ export class ReaderModel {
       if (current?.id === id) this.wordLookup.value = { ...current, ...patch }
     }
     const template = settings.explanationTemplate.value
-    const model = settings.textModel.value
+    const model = textModelName()
     // A saved explanation is shown at once; showing it never sends a request.
     void ExplanationService.cached(word, sentence, template, model).then((saved) => {
       if (saved) update({ explanation: saved })
@@ -811,7 +812,7 @@ export class ReaderModel {
       if (current?.id === id) this.wordLookup.value = { ...current, ...patch }
     }
     update({ explaining: true, explanationError: null, explanationNeedsSettings: false })
-    void ExplanationService.explain(lookup.word, lookup.sentence, settings.explanationTemplate.value, settings.textModel.value, regenerate)
+    void ExplanationService.explain(lookup.word, lookup.sentence, settings.explanationTemplate.value, textModelName(), regenerate)
       .then(
         (text) => update({ explanation: text, explaining: false }),
         (error) => update({
