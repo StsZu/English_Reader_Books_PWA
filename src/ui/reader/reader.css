@@ -360,7 +360,7 @@
 }
 
 .scrubber.is-dragging .scrubber-thumb { transform: scale(1.25); }
-.scrubber:focus-visible .scrubber-thumb { box-shadow: 0 0 0 3px var(--accent-tint), 0 0.5px 4px rgba(0, 0, 0, 0.25); }
+.scrubber:focus-visible .scrubber-thumb { box-shadow: 0 0 0 3px var(--accent), 0 0.5px 4px rgba(0, 0, 0, 0.25); }
 
 .scrubber-bubble {
   position: absolute;

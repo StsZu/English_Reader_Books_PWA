@@ -80,6 +80,12 @@ export function useDialogFocus(active: boolean, container: { current: HTMLElemen
       if (items.length === 0) return
       const firstItem = items[0]
       const lastItem = items[items.length - 1]
+      // The focused element was replaced (a new step of the training): Tab comes back inside, not to the page below.
+      if (!node.contains(document.activeElement)) {
+        event.preventDefault()
+        ;(event.shiftKey ? lastItem : firstItem).focus()
+        return
+      }
       if (event.shiftKey && document.activeElement === firstItem) {
         event.preventDefault()
         lastItem.focus()

@@ -206,3 +206,31 @@ test('вправа 5: зразок звучить до й після запис�
     await next.click()
   }
 })
+
+test('клавіатура: фокус у тренуванні, «Далі» й «Почати» з Tab і Enter, Esc закриває (аудит 2026-11-20)', async ({ page }) => {
+  await openTraining(page, 'voice=system')
+  const insideTraining = () => page.evaluate(() => !!document.activeElement?.closest('[data-testid="trainingScreen"]'))
+  expect(await insideTraining()).toBe(true)
+  const tabTo = async (testID: string) => {
+    for (let i = 0; i < 60; i++) {
+      if (await page.evaluate((id) => document.activeElement?.getAttribute('data-testid') === id, testID)) return
+      // WebKit, like Safari, reaches buttons with Option+Tab («Press Tab to highlight each item» off).
+      await page.keyboard.press('Alt+Tab')
+      expect(await insideTraining()).toBe(true)
+    }
+    throw new Error(`${testID} is not reachable with Tab`)
+  }
+  await tabTo('trainingContinue')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('trainingStart')).toBeVisible()
+  await tabTo('trainingStart')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('trainingStart')).toHaveCount(0)
+
+  await page.goto('./?testSavedWords&voice=system')
+  await page.getByTestId('savedButton').click()
+  await page.getByTestId('startTraining').click()
+  await expect(page.getByTestId('trainingScreen')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('trainingScreen')).toHaveCount(0)
+})

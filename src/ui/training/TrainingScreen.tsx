@@ -1,6 +1,6 @@
 // Port of TrainingView.swift: full-screen training of saved words (stages 2.4–2.5):
 // set, introduction, exercises 1–5, summary.
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { Circle } from 'lucide-preact'
 import { settings } from '../../core/storage/settings.ts'
 import { applyTraining, filterWords, words as savedWords, type SavedWord } from '../../core/saved/saved.ts'
@@ -11,7 +11,7 @@ import {
 import { TrainingSession } from '../../core/training/session.ts'
 import { PronunciationRecorder } from '../../core/training/recorder.ts'
 import { unlockAudio } from '../../core/speech/audio.ts'
-import { ConfirmDialog, IconButton, List, NavBar, Portal, Row, Section, Segmented, TextField, Toggle } from '../components/index.ts'
+import { ConfirmDialog, IconButton, List, NavBar, Portal, Row, Section, Segmented, TextField, Toggle, useDialogFocus } from '../components/index.ts'
 import { Icon } from '../icons.tsx'
 import { TrainingAudio } from './training-audio.ts'
 import { ExerciseView } from './ExerciseView.tsx'
@@ -44,6 +44,7 @@ export function TrainingScreen({ onClose }: TrainingScreenProps) {
   const [confirmClose, setConfirmClose] = useState(false)
   const audio = useMemo(() => new TrainingAudio(), [])
   const recorder = useMemo(() => new PronunciationRecorder(), [])
+  const screen = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     audio.configure()
@@ -58,6 +59,11 @@ export function TrainingScreen({ onClose }: TrainingScreenProps) {
     recorder.cleanUp()
     onClose()
   }
+
+  // Focus goes into the screen and Tab stays there, as in the other overlays (audit 2026-11-20); Esc acts like «Закрити».
+  const escape = useRef(() => {})
+  escape.current = () => (stage === 'exercise' ? setConfirmClose(true) : close())
+  useDialogFocus(true, screen, () => escape.current())
 
   const prepare = (words: SavedWord[]) => {
     unlockAudio()
@@ -78,7 +84,7 @@ export function TrainingScreen({ onClose }: TrainingScreenProps) {
   // A full-screen cover above sheets (the saved list stays open underneath), like SwiftUI fullScreenCover.
   return (
     <Portal>
-      <div class="training-screen" role="dialog" aria-modal="true" aria-label="Тренування" data-testid="trainingScreen">
+      <div ref={screen} class="training-screen" role="dialog" aria-modal="true" aria-label="Тренування" data-testid="trainingScreen">
         <NavBar
           title="Тренування"
           leading={<IconButton icon="xmark" label="Закрити" testID="closeTraining"
