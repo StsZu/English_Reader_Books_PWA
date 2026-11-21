@@ -141,6 +141,11 @@ describe('HTMLTextExtractor', () => {
 
   it('невідомі сутності лишаються як є', () => {
     expect(htmlBlocks('<p>a &constructor; &#x41; b</p>')[0].text).toBe('a &constructor; A b')
+    // All XHTML 1.0 names (old EPUB 2) and Latin Extended-A letters (audit 2026-11-20, spec.md V-30).
+    expect(htmlBlocks('<p>&bdquo;Tak&rdquo; &mdash; kr&oacute;l &Oacute;w &Eacute;mile &aogon;&eogon;&lstrok;&Lstrok;&zdot;&Zdot;&nacute;&sacute;&cacute;&zacute;</p>')[0].text)
+      .toBe('„Tak” — król Ów Émile ąęłŁżŻńśćź')
+    expect(htmlBlocks('<p>&lsaquo;a&rsaquo; &sbquo;b&lsquo; &frac12; &sect;3 &Omega; &rarr; &trade;</p>')[0].text).toBe('‹a› ‚b‘ ½ §3 Ω → ™')
+    expect(htmlBlocks('<p>a&nbsp;b&shy;c&thinsp;d &apos;e&apos; &unknownname; &AMP;</p>')[0].text).toBe("a bc d 'e' &unknownname; &AMP;")
   })
 })
 

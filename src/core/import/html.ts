@@ -3,6 +3,7 @@
 // Italic and bold ranges, element ids and what is left out come along with the text (specs/011-epub-formatting).
 import type { RawBlock } from '../model/book.ts'
 import { normalizeWhitespace } from '../model/segmenter.ts'
+import { htmlEntities } from './entities.ts'
 
 const blockTags = new Set([
   'p', 'div', 'br', 'li', 'blockquote', 'section', 'article', 'tr', 'td', 'th', 'dd', 'dt',
@@ -163,12 +164,9 @@ export function htmlDocument(html: string): HTMLDocument {
   return doc
 }
 
+/** XHTML 1.0 names and Latin Extended-A letters (entities.ts); spaces become plain spaces, as the reference does. */
 const namedEntities: Record<string, string> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
-  mdash: '—', ndash: '–', hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
-  laquo: '«', raquo: '»', copy: '©', shy: '', eacute: 'é', egrave: 'è', aacute: 'á',
-  agrave: 'à', ouml: 'ö', uuml: 'ü', auml: 'ä', ccedil: 'ç', iuml: 'ï', ecirc: 'ê',
-  bull: '•', middot: '·', times: '×', deg: '°', pound: '£', euro: '€', thinsp: ' ', ensp: ' ', emsp: ' ',
+  ...htmlEntities, apos: "'", nbsp: ' ', shy: '', thinsp: ' ', ensp: ' ', emsp: ' ', lrm: '', rlm: '',
 }
 
 function codePoint(value: number): string | null {

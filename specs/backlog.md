@@ -136,6 +136,11 @@
 - Перевірки: новий `tests/unit/check-secrets.test.ts` (тимчасовий git-репозиторій: чисті файли, ключ, файл без прав читання) падає на старому скрипті. Обидві мови: `npm test` 389 / 393, `npm run test:e2e` 96 / 96, `lint`, `typecheck`, `npm run check` — зелені.
 - **Реліз (2026-11-21):** дозвіл користувача — `ok merge`, `ok push`. `main` fast-forward `7e993d2` → `982a153`, push; розгорнуто автоматично Cloudflare Workers Builds (обидві перевірки — success); код застосунку не змінився. Нові версії EN `8df180f9`, PL `0a2f607d`; обидва сайти: `index.html` 200, JS 200, CSP на місці, `sw.js` · `982a153`. **Відкат:** EN `458b1ca4`, PL `7022535d` (збірка `7e993d2`, код — як `41c7bcf`).
 
+## Виправлено (2026-11-21, аудит `TASK/2026-11-20_audit_english_and_polish_readers.md`, розділ 5, сутності HTML)
+
+- **Іменовані сутності HTML поза коротким списком лишались у тексті:** `&bdquo;Tak&rdquo; &mdash; kr&oacute;l` ставало `&bdquo;Tak” — kr&oacute;l`. Тепер розпізнаються всі 252 назви XHTML 1.0 / HTML 4 і HTML5-назви літер Latin Extended-A (`src/core/import/entities.ts`, згенеровано з `html.entities` Python; `src/core/import/html.ts`; `spec.md` V-30). Уже імпортовані книжки не змінюються — для виправлення їх треба імпортувати знову.
+- Перевірки: новий тест у `tests/unit/import.test.ts` падає на старому коді. Обидві мови: `npm test` 389 / 393, `npm run test:e2e` 96 / 96, `npm run golden` (demo, pg1661 — пройдено), `lint`, `typecheck`, `npm run check` — зелені; JS +2 КБ gzip (97,2 / 97,7 КБ).
+
 ## Виправити
 
 | № | Що | Чому | Пропозиція |
