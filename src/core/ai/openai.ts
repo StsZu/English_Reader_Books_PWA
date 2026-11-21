@@ -37,6 +37,26 @@ export function mapError(status: number, body: string): AIServiceError {
   return { kind: 'http', status, message: (error?.message ?? '').slice(0, 160) }
 }
 
+/** Time allowed for the free check of why a request failed. */
+export const DIAGNOSE_TIMEOUT_MS = 10_000
+
+/**
+ * V-26: OpenAI answers a refused POST (expired key, no balance) without CORS headers, so the browser reports it as a
+ * network failure. The free model list does carry CORS headers and tells the real reason.
+ */
+async function diagnose(key: string): Promise<AIServiceError> {
+  try {
+    const response = await fetch(baseURL + 'models', {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(DIAGNOSE_TIMEOUT_MS),
+    })
+    if (response.ok) return { kind: 'refused' }
+    return mapError(response.status, await response.text().catch(() => ''))
+  } catch {
+    return { kind: 'offline' }
+  }
+}
+
 /**
  * POST with one deadline for the whole exchange (R3): headers, body and `read` of the body. A body that
  * stops arriving ends with `timeout`, and an abort stops the read even if the body itself ignores it.
@@ -64,9 +84,8 @@ async function post<T>(path: string, json: unknown, timeoutMs: number, read: (re
     } catch (error) {
       if (timedOut) throw new AIError({ kind: 'timeout' })
       if (signal?.aborted) throw abortError()
-      if (error instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
-        throw new AIError({ kind: 'offline' })
-      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new AIError({ kind: 'offline' })
+      if (error instanceof TypeError) throw new AIError(await diagnose(key))
       throw new AIError({ kind: 'http', status: -1, message: error instanceof Error ? error.message : String(error) })
     }
     const aborted = new Promise<never>((_, reject) => {

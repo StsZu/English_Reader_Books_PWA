@@ -11,6 +11,8 @@ export type AIServiceError =
   | { kind: 'server'; status: number }
   | { kind: 'http'; status: number; message: string }
   | { kind: 'offline' }
+  /** V-26: the network works, but OpenAI refused the request without CORS headers, so the reason is hidden. */
+  | { kind: 'refused' }
   | { kind: 'timeout' }
   | { kind: 'badResponse'; detail: string }
 
@@ -31,6 +33,7 @@ export function aiErrorText(e: AIServiceError): string {
     case 'server': return `Сервіс OpenAI тимчасово недоступний (${e.status}). Повторіть пізніше.`
     case 'http': return `Помилка OpenAI (${e.status})${e.message ? `: ${e.message}` : ''}.`
     case 'offline': return "Немає з'єднання з інтернетом."
+    case 'refused': return 'Перевірте ключ на platform.openai.com.'
     case 'timeout': return 'OpenAI не відповів вчасно. Повторіть.'
     case 'badResponse': return `Неочікувана відповідь сервісу (${e.detail}). Повторіть.`
   }

@@ -17,7 +17,7 @@ let requests: { url: string; body: Record<string, unknown> }[] = []
 function stubFetch(handler: Handler) {
   requests = []
   vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
-    const body = JSON.parse(String(init.body))
+    const body = init?.body ? JSON.parse(String(init.body)) : {}
     requests.push({ url: input, body })
     return handler(input, body)
   })
@@ -82,6 +82,27 @@ describe('OpenAI client', () => {
     expect(await kindOf(chatJSON('m', 's', 'u', (v) => v))).toBe('offline')
     stubFetch(() => new Response('{"error":{"message":"boom"}}', { status: 500 }))
     expect(await kindOf(chatJSON('m', 's', 'u', (v) => v))).toBe('server')
+  })
+
+  it('a refused request hidden as a network failure is explained by the free model list (V-26)', async () => {
+    const refusedPost = (models: () => Response) => stubFetch((url) => {
+      if (url.endsWith('/models')) return models()
+      throw new TypeError('Failed to fetch')
+    })
+    refusedPost(() => new Response('{"data":[]}', { status: 200 }))
+    expect(await kindOf(chatJSON('m', 's', 'u', (v) => v))).toBe('refused')
+    expect(requests.map((r) => r.url)).toEqual(['https://api.openai.com/v1/chat/completions', 'https://api.openai.com/v1/models'])
+    expect(aiErrorText({ kind: 'refused' })).toBe('Перевірте ключ на platform.openai.com.')
+    refusedPost(() => new Response('{"error":{"message":"Incorrect API key"}}', { status: 401 }))
+    expect(await kindOf(speech('m', 'v', 'text', 'i'))).toBe('unauthorized')
+    refusedPost(() => { throw new TypeError('Failed to fetch') })
+    expect(await kindOf(chatJSON('m', 's', 'u', (v) => v))).toBe('offline')
+
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    refusedPost(() => new Response('{"data":[]}', { status: 200 }))
+    expect(await kindOf(chatJSON('m', 's', 'u', (v) => v))).toBe('offline')
+    expect(requests).toHaveLength(1)
+    vi.restoreAllMocks()
   })
 
   it('times out after 60 s', async () => {
