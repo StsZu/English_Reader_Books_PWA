@@ -18,7 +18,8 @@ const flush = async () => { for (let i = 0; i < 5; i++) await tick() }
 
 class FakeElement implements MediaElement {
   private source = ''
-  currentTime = 0
+  private time = 0
+  seeks = 0
   duration = NaN
   paused = true
   playbackRate = 1
@@ -29,10 +30,17 @@ class FakeElement implements MediaElement {
   private listeners = new Map<string, Set<() => void>>()
   /** `lateDuration`: the metadata comes without a duration (NaN); it arrives later only by `durationchange` (reveal()). */
   constructor(private readonly durationOf: () => number = () => 100, private readonly lateDuration = false) {}
+  /** Setting the time is a seek: reported later by `seeked`, as a real element does. */
+  get currentTime() { return this.time }
+  set currentTime(value: number) {
+    this.time = value
+    this.seeks++
+    setTimeout(() => this.emit('seeked'), 0)
+  }
   get src() { return this.source }
   set src(value: string) {
     this.source = value
-    this.currentTime = 0
+    this.time = 0
     this.duration = NaN
     this.paused = true
     if (value.startsWith('blob:')) {
@@ -46,7 +54,9 @@ class FakeElement implements MediaElement {
   async play() {
     this.plays++
     this.paused = false
-    setTimeout(() => this.emit('playing'), 0)
+    // A new source drops the events still queued for the old one, as the load algorithm of a real element does.
+    const source = this.source
+    setTimeout(() => { if (this.source === source) this.emit('playing') }, 0)
   }
   pause() {
     if (this.paused) return
@@ -66,11 +76,11 @@ class FakeElement implements MediaElement {
     this.emit('durationchange')
   }
   advance(seconds: number) {
-    this.currentTime += seconds
+    this.time += seconds
     this.emit('timeupdate')
   }
   end() {
-    this.currentTime = this.duration
+    this.time = this.duration
     this.paused = true
     this.emit('pause')
     this.emit('ended')
@@ -303,7 +313,7 @@ describe('AudiobookPlayer', () => {
     expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 12, rate: 1 })
   })
 
-  it('after a pause starts 0.2 s earlier, 3 s after a long pause or reopening; a seek starts exactly there', async () => {
+  it('after a short pause continues without a seek; after a long pause or reopening goes back 3 s and plays once the seek is done', async () => {
     const { bookID, element, player } = await playerWith(['01.mp3'])
     player.play()
     await flush()
@@ -314,22 +324,26 @@ describe('AudiobookPlayer', () => {
     expect(player.time.value).toBe(30.4)
     await flush()
     expect((await loadAudioPosition(bookID))?.time).toBe(30.4)
+    const seeks = element.seeks
+    const plays = element.plays
     player.play()
-    expect(element.currentTime).toBeCloseTo(30.2)
-    expect(player.time.value).toBeCloseTo(30.2)
+    // No seek: a seek together with play() is heard as an echo on iPad.
+    expect(element.seeks).toBe(seeks)
+    expect(element.plays).toBe(plays + 1)
+    expect(element.currentTime).toBe(30.4)
     await flush()
-
-    // A second play while playing does not go back again.
-    player.play()
-    expect(element.currentTime).toBeCloseTo(30.2)
+    expect(player.state.value).toBe('playing')
 
     player.pause()
     const now = Date.now()
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now + LONG_PAUSE_MS)
     player.play()
     clock.mockRestore()
-    expect(element.currentTime).toBeCloseTo(27.2)
+    expect(player.state.value).toBe('loading')
     await flush()
+    expect(element.currentTime).toBeCloseTo(27.4)
+    expect(player.time.value).toBeCloseTo(27.4)
+    expect(player.state.value).toBe('playing')
 
     player.pause()
     player.seek(50)
@@ -351,7 +365,42 @@ describe('AudiobookPlayer', () => {
     await flush()
     expect(again.time.value).toBe(45)
     again.play()
+    await flush()
     expect(element2.currentTime).toBe(42)
+    expect(again.state.value).toBe('playing')
+  })
+
+  it('a rewind waits for the seek: playback starts only after seeked, and not at all if paused meanwhile', async () => {
+    const { element, player } = await playerWith(['01.mp3'])
+    player.play()
+    await flush()
+    element.advance(20)
+    player.pause()
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + LONG_PAUSE_MS)
+    let playsAtSeek = -1
+    const record = () => { if (playsAtSeek < 0) playsAtSeek = element.plays }
+    element.addEventListener('seeked', record)
+    const plays = element.plays
+    player.play()
+    clock.mockRestore()
+    await flush()
+    await flush()
+    element.removeEventListener('seeked', record)
+    // One play() is the silent unlock inside the gesture; the file plays only after its seek.
+    expect(playsAtSeek).toBe(plays + 1)
+    expect(element.plays).toBe(plays + 2)
+    expect(element.currentTime).toBe(17)
+
+    player.pause()
+    const clock2 = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + LONG_PAUSE_MS)
+    player.play()
+    clock2.mockRestore()
+    player.pause()
+    const before = element.plays
+    await flush()
+    expect(element.plays).toBe(before)
+    expect(player.state.value).toBe('paused')
   })
 
   it('a rewind never goes before the start of the track', async () => {
@@ -360,7 +409,10 @@ describe('AudiobookPlayer', () => {
     await flush()
     element.advance(0.1)
     player.pause()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + LONG_PAUSE_MS)
     player.play()
+    clock.mockRestore()
+    await flush()
     expect(element.currentTime).toBe(0)
   })
 

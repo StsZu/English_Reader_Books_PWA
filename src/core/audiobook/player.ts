@@ -29,12 +29,13 @@ export interface MediaElement {
 
 export const SKIP_SECONDS = 5
 export const RATES = [0.75, 0.9, 1, 1.15]
-/** «Слухати» after a pause starts a little earlier: the sound cut off at the pause was still on its way to the speaker
- * (about this long on iPad; a whole second was heard as a repeated word). */
-export const RESUME_REWIND_SECONDS = 0.2
-/** After a long pause (or reopening the book) it goes back further, to pick up the thread. */
+/** «Слухати» after a short pause continues where it stopped, without a seek: a seek together with play() makes
+ * Safari on iPad play a moment, then restart after the seek, heard as an echo (specs/003, 2026-11-25).
+ * After a long pause (or reopening the book) it goes back, to pick up the thread, and plays once the seek is done. */
 export const LONG_PAUSE_MS = 5 * 60_000
 export const LONG_PAUSE_REWIND_SECONDS = 3
+/** How long playback waits for the seek before a rewind if the element never reports it. */
+export const SEEK_WAIT_MS = 1000
 /** How often the listening place is saved while playing. */
 export const SAVE_INTERVAL_MS = 5000
 
@@ -67,6 +68,8 @@ export class AudiobookPlayer {
   private lastSave = 0
   /** When playback was paused (0: before this session); null after an explicit seek, which starts exactly there. */
   private pausedAt: number | null = null
+  /** Changed by every pause: a play waiting for its seek starts only if it is still the latest request. */
+  private playRequest = 0
   private disposed = false
 
   constructor(
@@ -155,23 +158,21 @@ export class AudiobookPlayer {
     this.error.value = null
     const audio = this.audio
     const rewind = this.resumeRewind()
-    if (this.loaded === this.track.value) {
-      if (rewind > 0) {
-        const target = Math.max(0, (this.pendingSeek ?? audio.currentTime) - rewind)
-        if (this.pendingSeek !== null) this.pendingSeek = target
-        else audio.currentTime = target
-        this.time.value = target
-      }
+    const loaded = this.loaded === this.track.value
+    if (loaded && rewind === 0) {
       this.state.value = 'loading'
       this.start()
       return
     }
-    // The file is not in the element yet: unlock it inside the gesture, then load and play.
+    // The file is not in the element yet, or a rewind: unlock the element inside the gesture, then load the file,
+    // seek and play only after the seek is done.
+    const from = loaded ? (this.pendingSeek ?? audio.currentTime) : this.time.value
     audio.src = SILENCE
     audio.play().catch(() => {})
     this.state.value = 'loading'
-    void this.prepare(this.track.value, Math.max(0, this.time.value - rewind)).then((ready) => {
-      if (ready) this.start()
+    const request = this.playRequest
+    void this.prepare(this.track.value, Math.max(0, from - rewind)).then((ready) => {
+      if (ready) this.startWhenSeeked(request)
       else this.state.value = 'paused'
     })
   }
@@ -179,8 +180,21 @@ export class AudiobookPlayer {
   private resumeRewind(): number {
     const pausedAt = this.pausedAt
     this.pausedAt = null
-    if (pausedAt === null) return 0
-    return Date.now() - pausedAt >= LONG_PAUSE_MS ? LONG_PAUSE_REWIND_SECONDS : RESUME_REWIND_SECONDS
+    return pausedAt !== null && Date.now() - pausedAt >= LONG_PAUSE_MS ? LONG_PAUSE_REWIND_SECONDS : 0
+  }
+
+  /** Plays once the seek of a just loaded file is done (or after SEEK_WAIT_MS), unless paused or replaced meanwhile. */
+  private startWhenSeeked(request: number) {
+    const audio = this.audio
+    const token = this.loadToken
+    const go = () => {
+      audio.removeEventListener('seeked', go)
+      clearTimeout(timer)
+      if (token !== this.loadToken || request !== this.playRequest || this.disposed) return
+      this.start()
+    }
+    audio.addEventListener('seeked', go)
+    const timer = setTimeout(go, SEEK_WAIT_MS)
   }
 
   /** The element's own time: `time` is refreshed only a few times a second. */
@@ -200,6 +214,7 @@ export class AudiobookPlayer {
   pause() {
     if (!this.element || this.state.value === 'idle' || this.state.value === 'paused') return
     this.captureTime()
+    this.playRequest++
     this.element.pause()
     this.state.value = 'paused'
     this.pausedAt = Date.now()
@@ -359,6 +374,7 @@ export class AudiobookPlayer {
   /** Paused by the system (call, Siri, headphones out) or by the lock screen. */
   private readonly onPause = () => {
     if (this.ownsElement && this.state.value === 'playing') {
+      this.playRequest++
       this.captureTime()
       this.state.value = 'paused'
       this.pausedAt = Date.now()
