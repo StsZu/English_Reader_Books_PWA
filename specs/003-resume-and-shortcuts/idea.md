@@ -122,4 +122,4 @@ K1–K4 виконано в обох застосунках.
 
 Перевірка звуку — лише на iPad.
 
-Виконано 2026-11-26: `src/core/audiobook/player.ts` (`RESUME_REWIND_SECONDS` = 0,2, `seekMuted`, поле `muted` у `MediaElement`), `tests/unit/audiobook.test.ts`. Перевірено: `npm test` 390 / 394 (EN / PL), `audiobook.spec.ts` EN і PL — 5 / 5, `npm run typecheck`, `npm run lint`, `npm run check` — зелені, JS 97,8 КБ gzip. Перевірка звуку на iPad — відкрито.
+Виконано 2026-11-26: `src/core/audiobook/player.ts` (`RESUME_REWIND_SECONDS` = 0,2, `seekMuted`, поле `muted` у `MediaElement`), `tests/unit/audiobook.test.ts`. Перевірено: `npm test` 390 / 394 (EN / PL), `audiobook.spec.ts` EN і PL — 5 / 5, `npm run typecheck`, `npm run lint`, `npm run check` — зелені, JS 97,8 КБ gzip. Розгорнуто (main 2bca830, Cloudflare Workers Builds після push); перевірено на iPad 2026-11-26: слова звучать повністю, подвоєння немає.
