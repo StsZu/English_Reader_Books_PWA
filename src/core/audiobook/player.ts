@@ -14,6 +14,7 @@ export type AudiobookState = 'idle' | 'loading' | 'playing' | 'paused'
 export interface MediaElement {
   src: string
   currentTime: number
+  muted: boolean
   readonly duration: number
   readonly paused: boolean
   playbackRate: number
@@ -29,12 +30,16 @@ export interface MediaElement {
 
 export const SKIP_SECONDS = 5
 export const RATES = [0.75, 0.9, 1, 1.15]
-/** «Слухати» after a short pause continues where it stopped, without a seek: a seek together with play() makes
- * Safari on iPad play a moment, then restart after the seek, heard as an echo (specs/003, 2026-11-25).
- * After a long pause (or reopening the book) it goes back, to pick up the thread, and plays once the seek is done. */
+/** «Слухати» after a short pause starts a little earlier: the sound cut off at the pause was still on its way to the
+ * speaker. Safari on iPad resumes a paused element only after about half a second while its time already runs, so
+ * the start of a word is lost; after a seek it starts exactly at the target, but first plays a moment of the old
+ * place (an echo). So resuming seeks with the element muted until `seeked` (specs/003, 2026-11-25 and 2026-11-26). */
+export const RESUME_REWIND_SECONDS = 0.2
+/** After a long pause (or reopening the book) it goes back further, to pick up the thread, and plays once the seek
+ * of the reloaded file is done. */
 export const LONG_PAUSE_MS = 5 * 60_000
 export const LONG_PAUSE_REWIND_SECONDS = 3
-/** How long playback waits for the seek before a rewind if the element never reports it. */
+/** How long playback waits (or stays muted) for a seek if the element never reports it. */
 export const SEEK_WAIT_MS = 1000
 /** How often the listening place is saved while playing. */
 export const SAVE_INTERVAL_MS = 5000
@@ -159,8 +164,9 @@ export class AudiobookPlayer {
     const audio = this.audio
     const rewind = this.resumeRewind()
     const loaded = this.loaded === this.track.value
-    if (loaded && rewind === 0) {
+    if (loaded && rewind < LONG_PAUSE_REWIND_SECONDS) {
       this.state.value = 'loading'
+      if (this.pendingSeek === null) this.seekMuted(Math.max(0, audio.currentTime - rewind))
       this.start()
       return
     }
@@ -180,7 +186,24 @@ export class AudiobookPlayer {
   private resumeRewind(): number {
     const pausedAt = this.pausedAt
     this.pausedAt = null
-    return pausedAt !== null && Date.now() - pausedAt >= LONG_PAUSE_MS ? LONG_PAUSE_REWIND_SECONDS : 0
+    if (pausedAt === null) return 0
+    return Date.now() - pausedAt >= LONG_PAUSE_MS ? LONG_PAUSE_REWIND_SECONDS : RESUME_REWIND_SECONDS
+  }
+
+  /** Seeks the loaded element with its sound off until the seek is done (or SEEK_WAIT_MS), so the moment Safari
+   * still plays from the old place is not heard. */
+  private seekMuted(target: number) {
+    const audio = this.audio
+    const unmute = () => {
+      audio.removeEventListener('seeked', unmute)
+      clearTimeout(timer)
+      audio.muted = false
+    }
+    audio.muted = true
+    audio.addEventListener('seeked', unmute)
+    const timer = setTimeout(unmute, SEEK_WAIT_MS)
+    audio.currentTime = target
+    this.time.value = target
   }
 
   /** Plays once the seek of a just loaded file is done (or after SEEK_WAIT_MS), unless paused or replaced meanwhile. */

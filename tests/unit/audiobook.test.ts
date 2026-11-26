@@ -1,7 +1,7 @@
 // Audiobook store and player (specs/002-audio-player, stage A) with a fake <audio> element.
 import { File as NodeFile } from 'node:buffer'
 import { describe, expect, it, vi } from 'vitest'
-import { AudiobookPlayer, LONG_PAUSE_MS, type MediaElement } from '../../src/core/audiobook/player.ts'
+import { AudiobookPlayer, LONG_PAUSE_MS, RESUME_REWIND_SECONDS, type MediaElement } from '../../src/core/audiobook/player.ts'
 import {
   addTracks, closeAudioDB, compareNames, deleteAudio, isAudioFile, listTracks, loadAudioPosition, removeOrphanAudio,
   saveAudioPosition, setTracks, trackFile, deleteTrackFile,
@@ -20,6 +20,7 @@ class FakeElement implements MediaElement {
   private source = ''
   private time = 0
   seeks = 0
+  muted = false
   duration = NaN
   paused = true
   playbackRate = 1
@@ -313,7 +314,7 @@ describe('AudiobookPlayer', () => {
     expect(await loadAudioPosition(bookID)).toEqual({ track: 0, time: 12, rate: 1 })
   })
 
-  it('after a short pause continues without a seek; after a long pause or reopening goes back 3 s and plays once the seek is done', async () => {
+  it('after a short pause goes back 0.2 s muted until the seek is done; after a long pause or reopening goes back 3 s and plays once the seek is done', async () => {
     const { bookID, element, player } = await playerWith(['01.mp3'])
     player.play()
     await flush()
@@ -327,11 +328,14 @@ describe('AudiobookPlayer', () => {
     const seeks = element.seeks
     const plays = element.plays
     player.play()
-    // No seek: a seek together with play() is heard as an echo on iPad.
-    expect(element.seeks).toBe(seeks)
+    // A seek together with play(): the moment Safari plays from the old place is muted until seeked.
+    expect(element.seeks).toBe(seeks + 1)
     expect(element.plays).toBe(plays + 1)
-    expect(element.currentTime).toBe(30.4)
+    expect(element.currentTime).toBeCloseTo(30.4 - RESUME_REWIND_SECONDS)
+    expect(player.time.value).toBeCloseTo(30.4 - RESUME_REWIND_SECONDS)
+    expect(element.muted).toBe(true)
     await flush()
+    expect(element.muted).toBe(false)
     expect(player.state.value).toBe('playing')
 
     player.pause()
@@ -341,8 +345,8 @@ describe('AudiobookPlayer', () => {
     clock.mockRestore()
     expect(player.state.value).toBe('loading')
     await flush()
-    expect(element.currentTime).toBeCloseTo(27.4)
-    expect(player.time.value).toBeCloseTo(27.4)
+    expect(element.currentTime).toBeCloseTo(27.4 - RESUME_REWIND_SECONDS)
+    expect(player.time.value).toBeCloseTo(27.4 - RESUME_REWIND_SECONDS)
     expect(player.state.value).toBe('playing')
 
     player.pause()
@@ -350,6 +354,7 @@ describe('AudiobookPlayer', () => {
     player.play()
     expect(element.currentTime).toBe(50)
     await flush()
+    expect(element.muted).toBe(false)
 
     element.pause()
     await flush()
